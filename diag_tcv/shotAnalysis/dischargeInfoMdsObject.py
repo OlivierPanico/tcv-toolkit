@@ -29,8 +29,33 @@ import MDSplus as mds
 ### ========== ###
 ### PARAMETERS ###
 ### ========== ###
-cmap='viridis'
-cmap='jet'
+# cmap=plt.cm.viridis #'viridis'
+# cmap=plt.cm.jet #'jet'
+# cmap = plt.cm.plasma
+
+from matplotlib.colors import LinearSegmentedColormap
+cdict = {'red':   [[0.0,  0.0, 0.0],
+                   [0.5,  1.0, 1.0],
+                   [1.0,  1.0, 1.0]],
+         'green': [[0.0,  0.0, 0.0],
+                   [0.25, 0.0, 0.0],
+                   [0.75, 1.0, 1.0],
+                   [1.0,  1.0, 1.0]],
+         'blue':  [[0.0,  0.0, 0.0],
+                   [0.5,  0.0, 0.0],
+                   [1.0,  1.0, 1.0]]}
+
+# cmap = LinearSegmentedColormap('custom', segmentdata=cdict, N=256)
+
+
+
+
+color_list = ['xkcd:blue', 'xkcd:red', 'xkcd:green', 'xkcd:teal', 'xkcd:orange', 'xkcd:magenta', 'brown', 'pink', 'grey', 'black']
+from matplotlib.colors import ListedColormap
+cmap = ListedColormap(color_list)
+
+marker_list = ['+', 's', 'x', 'o', 'v', '^', '<', '>', 'p', 'P', '*', 'h', 'H', 'X', 'd', '|', '_']
+
 
 ### PHYSICAL CONSTANTS ###
 k_b = 1.380649E-23   #Boltzmann Constant
@@ -70,11 +95,12 @@ def handle_nan(data, ax0_array, value=None):
 ### General plotting functions
 
 # def plot_(array, t, rho, time_list, array_err = None, ax=None, rhomin=0, rhomax=1, tavg=0.2):
-def plot_time(array, t, rho, rho_list, array_err=None, ax=None, tmin=0, tmax=-1, rhoavg=0.2):
+def plot_time(array, t, rho, rho_list, array_err=None, ax=None, tmin=0, tmax=-1, rhoavg=0.2, **kwargs):
     '''
     TO PLOT IF THE ARRAY IS (RHO, TIME)
     Otherwise call the same function with np.transpose(array) & np.transpose(array_err)
     '''
+
     
     clist = get_cmap_list(len(rho_list), cmap)
     ind_tmin = get_closest_ind(t, tmin)
@@ -100,8 +126,16 @@ def plot_time(array, t, rho, rho_list, array_err=None, ax=None, tmin=0, tmax=-1,
         else:
             assert(ind_rhomin==ind_rhomax)
             array_loc = array[ind_rhomin, ind_tmin:ind_tmax]
-          
-        ax.plot(t, array_loc, color=clist[i], marker='+', label=r'$\rho$={:.2f}'.format(rho[int((ind_rhomin+ind_rhomax)/2)]))
+        
+        if 'label' in kwargs:
+            label=kwargs['label']
+        else:
+            label=r'$\rho$={:.2f}'.format(rho[int((ind_rhomin+ind_rhomax)/2)])
+        if 'color' in kwargs:
+            color=kwargs['color']
+        else:
+            color=clist[i]
+        ax.plot(t, array_loc, color=color, marker= marker_list[i],markersize=3, label=label)
         
         if array_err is not None:
             if rhoavg != 0: 
@@ -110,9 +144,9 @@ def plot_time(array, t, rho, rho_list, array_err=None, ax=None, tmin=0, tmax=-1,
                 assert(ind_rhomin==ind_rhomax)
                 array_err_loc = array_err[ind_rhomin, ind_tmin:ind_tmax]
             
-            ax.fill_between(t, array_loc-array_err_loc, array_loc+array_err_loc, color=clist[i], alpha=0.2)
+            ax.fill_between(t, array_loc-array_err_loc, array_loc+array_err_loc, color=color, alpha=0.2)
 
-    ax.legend(fontsize='12')
+    ax.legend(fontsize='8')
     ax.set_xlabel('T [s]')
     # ax.ticklabel_format(axis='y', style='sci', scilimits=(19,19))
 
@@ -314,7 +348,8 @@ class TCVShot():
             #Careful: this assume ti and ti_err are Nans at the same time
             self.cxrs_ti, _ = handle_nan(self.cxrs_ti, self.cxrs_time, value=None)
             self.cxrs_ti_err, self.cxrs_time = handle_nan(self.cxrs_ti_err, self.cxrs_time, value=None)
-
+            self.cxrs_vtor, self.cxrs_vtor_time = handle_nan(self.cxrs_vtor, self.cxrs_vtor_time, value=None)
+            
 
 
     def get_cxrs_raw(self):
@@ -653,27 +688,212 @@ class TCVShot():
 
             
     
-    def plot_heating(self):
+    def plot_heating(self, ax=None, color=None):
         self.get_nbi()
         self.get_ecrh()
         
-        fig, ax = plot_1d([], [], grid=True)
-        ax.set_title('#{}'.format(self.shot))
+        if ax is None:
+            fig, ax = plot_1d([], [], grid=True)
+            ax.set_title('#{}'.format(self.shot))
         
         if self.tag_nbi:
             if self.tag_nb1:
-                ax.plot(self.nbi_time, self.nb1*1e3, color='red', label='NB1')
+                if color is None:
+                    ax.plot(self.nbi_time, self.nb1*1e3, color='red', label='NB1')
+                else:
+                    ax.plot(self.nbi_time, self.nb1*1e3,linestyle='--', marker='o', linewidth=0.2, markersize=5, markevery=500, color=color, label='NB1')
+                
             if self.tag_nb2:
-                ax.plot(self.nbi_time, self.nb2*1e3, color='green', label='NB2')
-        
+                if color is None:
+                    ax.plot(self.nbi_time, self.nb2*1e3, color='green', label='NB2')
+                else:
+                    ax.plot(self.nbi_time, self.nb2*1e3, linestyle='dotted', color=color, label='NB2')
+                        
         if self.tag_ecrh:
-            ax.plot(self.ecrh_time, self.ecrh_tot, color='xkcd:dark yellow', label='ECRH tot')
+            if color is None:
+                ax.plot(self.ecrh_time, self.ecrh_tot, color='xkcd:dark yellow', label='ECRH tot')
+            else:
+                ax.plot(self.ecrh_time, self.ecrh_tot, marker='s',linewidth=0.2, markersize=5, markevery=500, color=color, label='ECRH tot')
+                
+    
         
         ax.set_ylabel('Power [kW]')
-        ax.set_xlabel('Time [s]')
-        ax.legend()
+        ax.set_xlabel('T [s]')
+        ax.legend(fontsize='8')
+        if self.tag_ecrh and self.tag_nbi:
+            ax.set_xlim(max(self.ecrh_time[0], self.nbi_time[0]), min(self.ecrh_time[-1], self.nbi_time[-1]))
+        
+    
+    def plot_summary(self):
         
         
+        self.get_thomson_fit()
+        self.get_cxrs_fit(set_nan_to_zero=False)
+        
+        fig ,axs = prep_multiple_subplots(3,2, figsize=(8,8), axgrid=[0,1,2,3,4,5], sharex=False)
+        fig.suptitle('#{}'.format(self.shot))
+        
+    
+        #ne
+        plot_time(self.th_ne/10**19, self.th_time, self.th_rho, [0.6,0.8,0.95], array_err=self.th_ne_err/10**19, ax=axs[1,0], tmin=0, tmax=-1, rhoavg=0.1)
+        axs[1,0].set_ylabel(r'$n_e$ $[10^{19}]$')
+        #Te
+        plot_time(self.th_te/1e3, self.th_time, self.th_rho, [0.6,0.8,0.95], array_err=self.th_te_err/1e3, ax=axs[2,0], tmin=0, tmax=-1, rhoavg=0.1)
+        axs[2,0].set_ylabel(r'$T_e$ $[keV]$')
+        #Ti
+        plot_time(np.transpose(self.cxrs_ti/1e3), self.cxrs_time, self.cxrs_rho, [0.6,0.8,0.95], array_err=np.transpose(self.cxrs_ti_err/1e3), ax=axs[0,1], tmin=0, tmax=-1, rhoavg=0)
+        axs[0,1].set_ylabel(r'$T_i$ $[keV]$')
+        #vtor 
+        plot_time(np.transpose(self.cxrs_vtor), self.cxrs_vtor_time, self.cxrs_rho, [0.6,0.8,0.95], array_err=np.transpose(self.cxrs_vtor_err), ax=axs[1,1], tmin=0, tmax=-1, rhoavg=0)
+        axs[1,1].set_ylabel(r'$v_{tor}$ $[km/s]$')
+        #heating
+        self.plot_heating(ax=axs[0,0])
+        axs[0,0].set_xlim(self.th_time[0], self.th_time[-1])
+        #Shot info ?
+        plot_time(self.th_te, self.th_time, self.th_rho, [0.9], array_err=self.th_te_err, ax=axs[2,1], tmin=0, tmax=-1, rhoavg=0.1, label=r'$T_e$ $\rho=0.9$', color='blue')
+        plot_time(np.transpose(self.cxrs_ti), self.cxrs_time, self.cxrs_rho, [0.9], array_err=np.transpose(self.cxrs_ti_err), ax=axs[2,1], tmin=0, tmax=-1, rhoavg=0, label=r'$T_i$, $\rho=0.9$', color='red')
+        axs[2,1].legend(fontsize='12')
+        axs[2,1].set_ylabel(r'$T_e$, $T_i$ $[eV]$')
+        axs[2,1].set_xlim(self.cxrs_vtor_time[0], self.cxrs_vtor_time[-1])
+        
+        plt.tight_layout()
+
+
+
+
+def plot_profiles_comparison(shot_list, time_list, rhomin=None, rhomax=None):
+    
+    list_obj_tcv = [TCVShot(shot) for shot in shot_list]
+    
+   
+    for i in range(len(list_obj_tcv)):
+        list_obj_tcv[i].get_thomson_fit()
+        list_obj_tcv[i].get_cxrs_fit()
+        
+    if len(shot_list) != len(time_list):
+        print('\n --- choosing same time for all shots --- ')
+        th_time_ind_list = [get_closest_ind(list_obj_tcv[i].th_time, time_list[0]) for i in range(len(list_obj_tcv))]
+        cxrs_time_ind_list = [get_closest_ind(list_obj_tcv[i].cxrs_time, time_list[0]) for i in range(len(list_obj_tcv))]
+        
+    th_time_ind_list = [get_closest_ind(list_obj_tcv[i].th_time, time_list[i]) for i in range(len(list_obj_tcv))]
+    cxrs_time_ind_list = [get_closest_ind(list_obj_tcv[i].cxrs_time, time_list[i]) for i in range(len(list_obj_tcv))]
+    cxrs_vtor_time_ind_list = [get_closest_ind(list_obj_tcv[i].cxrs_vtor_time, time_list[i]) for i in range(len(list_obj_tcv))]
+    
+    
+    # color_list = ['blue', 'red', 'green', 'black', 'orange', 'purple', 'brown', 'pink', 'grey', 'cyan']
+    # marker_list = 
+    fig ,axs = prep_multiple_subplots(2,2, figsize=(8,5), axgrid=[0,1,2,3], sharex=True)
+    fig.suptitle('#{}'.format(shot_list))
+    
+    # fig, ax_te = plot_1d([], [], grid=True, xlabel=r'$\rho$', ylabel=r'$T_e$ $[eV]$')
+    # fig, ax_ne = plot_1d([], [], grid=True, xlabel=r'$\rho$', ylabel=r'$n_e$ $[10^{19} m^{-3}]$')
+    # fig, ax_ti = plot_1d([], [], grid=True, xlabel=r'$\rho$', ylabel=r'$T_i$ $[eV]$')
+    for i in range(len(list_obj_tcv)):
+        
+        # list_obj_tcv[i].plot_heating(ax=axs[0,0], color=color_list[i])
+        axs[0,1].plot(list_obj_tcv[i].th_rho, list_obj_tcv[i].th_te[:,th_time_ind_list[i]]/1e3 ,marker='+', 
+                      label='#{}, T={:.3f}'.format(shot_list[i], list_obj_tcv[i].th_time[th_time_ind_list[i]]),  color=color_list[i])
+        
+        axs[1,0].plot(list_obj_tcv[i].cxrs_rho, list_obj_tcv[i].cxrs_vtor[cxrs_vtor_time_ind_list[i],:],marker='+',
+                        label='#{}, T={:.3f}'.format(shot_list[i], list_obj_tcv[i].cxrs_vtor_time[cxrs_vtor_time_ind_list[i]]), color=color_list[i])
+        
+        axs[0,0].plot(list_obj_tcv[i].th_rho, list_obj_tcv[i].th_ne[:,th_time_ind_list[i]]/10**19,marker='+', 
+                      label='#{}, T={:.3f}'.format(shot_list[i], list_obj_tcv[i].th_time[th_time_ind_list[i]]), color=color_list[i])
+        
+        axs[1,1].plot(list_obj_tcv[i].cxrs_rho, list_obj_tcv[i].cxrs_ti[cxrs_time_ind_list[i],:]/1e3,marker='+', 
+                      label='#{}, T={:.3f}'.format(shot_list[i], list_obj_tcv[i].cxrs_time[cxrs_time_ind_list[i]]), color=color_list[i])
+ 
+        # axs[0,0].axvline(list_obj_tcv[i].th_time[th_time_ind_list[i]], color=color_list[i])
+ 
+    axs[0,0].legend(fontsize="8")
+    # axs[0,1].legend()
+    # axs[1,1].legend()
+    axs[0,1].set_ylabel(r'$T_e$ $[keV]$')
+    axs[0,0].set_ylabel(r'$n_e$ $[10^{19} m^{-3}]$')
+    axs[1,0].set_ylabel(r'$v_{tor}$ $[km/s]$')
+    axs[1,1].set_ylabel(r'$T_i$ $[keV]$')
+    axs[1,0].set_xlabel(r'$\rho$')
+    axs[1,1].set_xlabel(r'$\rho$')
+    
+    #     ax_te.plot(list_obj_tcv[i].th_rho, list_obj_tcv[i].th_te[:,th_time_ind_list[i]],marker='+', label='#{}, T={:.3f}'.format(shot_list[i], list_obj_tcv[i].th_time[th_time_ind_list[i]]))
+    #     ax_ne.plot(list_obj_tcv[i].th_rho, list_obj_tcv[i].th_ne[:,th_time_ind_list[i]]/10**19,marker='+', label='#{}, T={:.3f}'.format(shot_list[i], list_obj_tcv[i].th_time[th_time_ind_list[i]]))
+    #     ax_ti.plot(list_obj_tcv[i].cxrs_rho, list_obj_tcv[i].cxrs_ti[cxrs_time_ind_list[i],:],marker='+', label='#{}, T={:.3f}'.format(shot_list[i], list_obj_tcv[i].cxrs_time[cxrs_time_ind_list[i]]))
+    # ax_te.legend()
+    # ax_ne.legend()
+    # ax_ti.legend()
+
+
+
+
+#%% preparation profiles 2322 545
+#I want first to print heating schemes for shots listed here, then I want to produce profiles at each step of heating scheme for each shot.
+#I will use the class TCVShot to do so.
+
+
+### Bloc ohmic heating ###
+# shot=80156
+# a=TCVShot(shot)
+# a.plot_summary()
+# plot_profiles_comparison([shot], [1.3])
+
+
+### Bloc ECRH heating ###
+# shot=80163
+# a=TCVShot(shot)
+# a.plot_summary()
+# plot_profiles_comparison([shot], [1.3])
+
+# shot=80336
+# a=TCVShot(shot)
+# a.plot_summary()
+# plot_profiles_comparison([shot], [1])
+
+### Bloc mixed heating ###
+# shot=80162
+# a=TCVShot(shot)
+# a.plot_summary()
+# plot_profiles_comparison([shot, shot, shot, shot], [1, 1.2, 1.6, 1.85])
+
+# shot=80257
+# a=TCVShot(shot)
+# a.plot_summary()
+# plot_profiles_comparison([shot, shot, shot, shot], [1, 1.2, 1.6, 1.85])
+
+# shot=80322
+# a=TCVShot(shot)
+# a.plot_summary()
+# plot_profiles_comparison([shot, shot, shot, shot], [1, 1.2, 1.6, 1.8])
+
+
+### Bloc toroidal rotation ###
+
+# shot=80324
+# a=TCVShot(shot)
+# a.plot_summary()
+# plot_profiles_comparison([shot, shot], [0.9, 1.4])
+
+# shot=80328
+# a=TCVShot(shot)
+# a.plot_summary()
+# plot_profiles_comparison([shot, shot], [0.9, 1.4])
+
+# shot=80745
+# a=TCVShot(shot)
+# a.plot_summary()
+# plot_profiles_comparison([shot, shot, shot], [0.8, 1.2, 1.7])
+            
+# shot=80753
+# a=TCVShot(shot)
+# a.plot_summary()
+# plot_profiles_comparison([shot, shot, shot], [0.8, 1.2, 1.7])
+
+
+### Bloc density ramp ###
+
+# shot=80376
+# a=TCVShot(shot)
+# a.plot_summary()
+# plot_profiles_comparison([80376, 80376], [1, 1.5])
             
 #%% Function to store
 
