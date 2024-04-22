@@ -47,15 +47,17 @@ cdict = {'red':   [[0.0,  0.0, 0.0],
 
 # cmap = LinearSegmentedColormap('custom', segmentdata=cdict, N=256)
 
-
-
-
 color_list = ['xkcd:blue', 'xkcd:red', 'xkcd:green', 'xkcd:teal', 'xkcd:orange', 'xkcd:magenta', 'brown', 'pink', 'grey', 'black']
 from matplotlib.colors import ListedColormap
 cmap = ListedColormap(color_list)
 
 marker_list = ['+', 's', 'x', 'o', 'v', '^', '<', '>', 'p', 'P', '*', 'h', 'H', 'X', 'd', '|', '_']
 
+
+### INTERACTIVE FIGURES ###
+# from DBS.io.utils import run_line_magic
+# run_line_magic('matplotlib', 'widget')
+# run_line_magic('matplotlib', 'inline')
 
 ### PHYSICAL CONSTANTS ###
 k_b = 1.380649E-23   #Boltzmann Constant
@@ -95,7 +97,7 @@ def handle_nan(data, ax0_array, value=None):
 ### General plotting functions
 
 # def plot_(array, t, rho, time_list, array_err = None, ax=None, rhomin=0, rhomax=1, tavg=0.2):
-def plot_time(array, t, rho, rho_list, array_err=None, ax=None, tmin=0, tmax=-1, rhoavg=0.2, **kwargs):
+def plot_time(array, t, rho, rho_list, array_err=None, ax=None, tmin=0, tmax=-1, rhoavg=0.2, legend=True, **kwargs):
     '''
     TO PLOT IF THE ARRAY IS (RHO, TIME)
     Otherwise call the same function with np.transpose(array) & np.transpose(array_err)
@@ -145,8 +147,8 @@ def plot_time(array, t, rho, rho_list, array_err=None, ax=None, tmin=0, tmax=-1,
                 array_err_loc = array_err[ind_rhomin, ind_tmin:ind_tmax]
             
             ax.fill_between(t, array_loc-array_err_loc, array_loc+array_err_loc, color=color, alpha=0.2)
-
-    ax.legend(fontsize='8')
+    if legend:
+        ax.legend(fontsize='8')
     ax.set_xlabel('T [s]')
     # ax.ticklabel_format(axis='y', style='sci', scilimits=(19,19))
 
@@ -241,11 +243,16 @@ class TCVShot():
         except:
             print('No electron temperature from Thomson')
             self.tag_th_te = False
-        #time   
-        self.th_time = self.tree.getNode('\RESULTS::thomson.profiles.auto:time').data()
-        #rho 
-        self.th_rho = self.tree.getNode('\RESULTS::thomson.profiles.auto:rho').data()
-        
+        try:
+            #time   
+            self.th_time = self.tree.getNode('\RESULTS::thomson.profiles.auto:time').data()
+            #rho 
+            self.th_rho = self.tree.getNode('\RESULTS::thomson.profiles.auto:rho').data()
+            self.tag_th_time = True
+        except:
+            print('No time / rho from Thomson')
+            self.tag_th_time = False
+            
         #tag thomson True indicates the user already tried to load thomson data
         self.tag_th_fit = True
         
@@ -263,6 +270,7 @@ class TCVShot():
         try:
             self.nb2 = self.tree.getNode('\RESULTS::NB2:POWR_TCV').data()
             self.tag_nb2 = True
+            
         except:
             print('No NB2 data')
             self.tag_nb2 = False
@@ -346,9 +354,11 @@ class TCVShot():
         
         if set_nan_to_zero:
             #Careful: this assume ti and ti_err are Nans at the same time
-            self.cxrs_ti, _ = handle_nan(self.cxrs_ti, self.cxrs_time, value=None)
-            self.cxrs_ti_err, self.cxrs_time = handle_nan(self.cxrs_ti_err, self.cxrs_time, value=None)
-            self.cxrs_vtor, self.cxrs_vtor_time = handle_nan(self.cxrs_vtor, self.cxrs_vtor_time, value=None)
+            if self.tag_cxrs_ti:
+                self.cxrs_ti, _ = handle_nan(self.cxrs_ti, self.cxrs_time, value=None)
+                self.cxrs_ti_err, self.cxrs_time = handle_nan(self.cxrs_ti_err, self.cxrs_time, value=None)
+            if self.tag_cxrs_vtor:
+                self.cxrs_vtor, self.cxrs_vtor_time = handle_nan(self.cxrs_vtor, self.cxrs_vtor_time, value=None)
             
 
 
@@ -380,7 +390,73 @@ class TCVShot():
         self.cxrs_vpol_raw = self.VpolNode_raw.data()
         self.cxrs_rho_vpol_raw = self.VpolNode_raw.getDimensionAt(0).data()
 
+    def get_Ip(self):
+        '''
+        For now the magnetic equilibrium / data are not loaded for pythonn
+        '''
+        
+        print('\n Loading Ip')
+        
+        try:
+            self.ip = self.tree.getNode('\MAGNETICS::IPLASMA').data()
+            self.ip_time = self.tree.getNode('\MAGNETICS::IPLASMA').getDimensionAt(0).data()
+            self.tag_ip = True
+        except:
+            print('No Ip data')
+            self.tag_ip = False
+        
+        try:
+            self.ip_ref = self.tree.getNode('\PCS::DRAW_REFS:REF_013').data()
+            self.ip_ref_time = self.tree.getNode('\PCS::DRAW_REFS:REF_013').getDimensionAt(0).data()
+            self.tag_ip_ref = True
+        except:
+            print('No Ip ref data')
+            self.tag_ip_ref = False
 
+
+    def get_FIR(self):
+        
+        print('\n Loading FIR data')
+        
+        try:
+            self.fir_int_ne = self.tree.getNode('\RESULTS::FIR:LIN_INT_DENS').data()
+            self.fir_time = self.tree.getNode('\RESULTS::FIR:LIN_INT_DENS').getDimensionAt(0).data()
+            self.tag_fir = True
+        except:
+            print('No FIR data')
+            self.tag_fir = False
+            
+        try: 
+            self.ref_int_ne = self.tree.getNode('\PCS::DRAW_REFS:REF_021').data()
+            self.ref_int_ne_time = self.tree.getNode('\PCS::DRAW_REFS:REF_021').getDimensionAt(0).data()
+        except:
+            print('No reference int ne data')
+            self.tag_ref_int_ne = False
+
+
+    def get_h_factor(self, nb_scaling_law = 4):
+        '''
+        nb_scaling law chooses which scaling law to use for the H factor
+        0=RLW
+        1=IAEA-TCV
+        2=ITER98L
+        3=ITER89P
+        4=ITER98
+        default = 4
+        '''
+        _list_model = ['RLW', 'IAEA-TCV', 'ITER98L', 'ITER89P', 'ITER98']
+        
+        print('\n Loading H factor data ; model = {}'.format(_list_model[nb_scaling_law]))
+        
+        try:
+            self.h_factor = self.tree.getNode('\RESULTS::PROFFIT:AVG_TIME:H_SCAL').data()[:,nb_scaling_law]
+            self.h_factor_time = self.tree.getNode('\RESULTS::PROFFIT:AVG_TIME:H_SCAL').getDimensionAt(1).data()
+            self.h_factor_model = _list_model[nb_scaling_law]
+            self.tag_h_factor = True
+        except:
+            print('No H factor data')
+            self.tag_h_factor = False
+            self.h_factor_model = ''
 
 
     def get_r_and_R(self, twindow=None):
@@ -486,7 +562,7 @@ class TCVShot():
                
         #Loading Zeff
         zeff = np.mean(self.tree.getNode(r'\results::ibs:z_eff').data())
-               
+        self.zeff = zeff
         
         ### VARIABLES TCV ###
         # R = 0.88
@@ -715,8 +791,7 @@ class TCVShot():
             else:
                 ax.plot(self.ecrh_time, self.ecrh_tot, marker='s',linewidth=0.2, markersize=5, markevery=500, color=color, label='ECRH tot')
                 
-    
-        
+
         ax.set_ylabel('Power [kW]')
         ax.set_xlabel('T [s]')
         ax.legend(fontsize='8')
@@ -729,34 +804,67 @@ class TCVShot():
         
         self.get_thomson_fit()
         self.get_cxrs_fit(set_nan_to_zero=False)
+        self.get_Ip()
+        self.get_FIR()
+        self.get_h_factor()
         
-        fig ,axs = prep_multiple_subplots(3,2, figsize=(8,8), axgrid=[0,1,2,3,4,5], sharex=False)
+        fig ,axs = prep_multiple_subplots(3,3, figsize=(12,8), axgrid=[0,1,2,3,4,5,6,7,8], sharex=False)
         fig.suptitle('#{}'.format(self.shot))
         
-    
-        #ne
-        plot_time(self.th_ne/10**19, self.th_time, self.th_rho, [0.6,0.8,0.95], array_err=self.th_ne_err/10**19, ax=axs[1,0], tmin=0, tmax=-1, rhoavg=0.1)
-        axs[1,0].set_ylabel(r'$n_e$ $[10^{19}]$')
-        #Te
-        plot_time(self.th_te/1e3, self.th_time, self.th_rho, [0.6,0.8,0.95], array_err=self.th_te_err/1e3, ax=axs[2,0], tmin=0, tmax=-1, rhoavg=0.1)
-        axs[2,0].set_ylabel(r'$T_e$ $[keV]$')
-        #Ti
-        plot_time(np.transpose(self.cxrs_ti/1e3), self.cxrs_time, self.cxrs_rho, [0.6,0.8,0.95], array_err=np.transpose(self.cxrs_ti_err/1e3), ax=axs[0,1], tmin=0, tmax=-1, rhoavg=0)
-        axs[0,1].set_ylabel(r'$T_i$ $[keV]$')
-        #vtor 
-        plot_time(np.transpose(self.cxrs_vtor), self.cxrs_vtor_time, self.cxrs_rho, [0.6,0.8,0.95], array_err=np.transpose(self.cxrs_vtor_err), ax=axs[1,1], tmin=0, tmax=-1, rhoavg=0)
-        axs[1,1].set_ylabel(r'$v_{tor}$ $[km/s]$')
+        #Ip
+        if self.tag_ip:
+            axs[0,0].plot(self.ip_time, self.ip*1e-6, color='xkcd:green', label='Ip')
+        if self.tag_ip_ref:
+            axs[0,0].plot(self.ip_ref_time, self.ip_ref*1e-6, color='black', label='Ip ref')
+        axs[0,0].set_ylabel('Ip [MA]')
+        axs[0,0].legend(fontsize='10')
+        axs[0,0].set_xlabel('T [s]')
         #heating
-        self.plot_heating(ax=axs[0,0])
-        axs[0,0].set_xlim(self.th_time[0], self.th_time[-1])
-        #Shot info ?
-        plot_time(self.th_te, self.th_time, self.th_rho, [0.9], array_err=self.th_te_err, ax=axs[2,1], tmin=0, tmax=-1, rhoavg=0.1, label=r'$T_e$ $\rho=0.9$', color='blue')
-        plot_time(np.transpose(self.cxrs_ti), self.cxrs_time, self.cxrs_rho, [0.9], array_err=np.transpose(self.cxrs_ti_err), ax=axs[2,1], tmin=0, tmax=-1, rhoavg=0, label=r'$T_i$, $\rho=0.9$', color='red')
-        axs[2,1].legend(fontsize='12')
-        axs[2,1].set_ylabel(r'$T_e$, $T_i$ $[eV]$')
-        axs[2,1].set_xlim(self.cxrs_vtor_time[0], self.cxrs_vtor_time[-1])
+        self.plot_heating(ax=axs[1,0])
+        if self.tag_th_time:
+            axs[1,0].set_xlim(self.th_time[0], self.th_time[-1])
+        #H factor
+        if self.tag_h_factor:
+            axs[2,0].plot(self.h_factor_time, self.h_factor, color='xkcd:dark green', label='H factor')
+        axs[2,0].set_ylabel(r'$H$ {}'.format(self.h_factor_model))
+        axs[2,0].set_xlabel('T [s]')
+        #ne
+        if self.tag_th_ne:
+            plot_time(self.th_ne/10**19, self.th_time, self.th_rho, [0.6,0.8,0.95], array_err=self.th_ne_err/10**19, ax=axs[0,1], tmin=0, tmax=-1, rhoavg=0.1)
+        axs[0,1].set_ylabel(r'$n_e$ $[10^{19}]$')
+        #FIR ne
+        if self.tag_fir:
+            axs[1,1].plot(self.fir_time, self.fir_int_ne/10**19, color='xkcd:dark green', label='FIR ne')
+            axs[1,1].plot(self.ref_int_ne_time, self.ref_int_ne, color='black', label='FIR ne ref')
+        axs[1,1].set_ylabel(r'FIR $n_e$ $[10^{19}]$')
+        if self.tag_th_time:
+            axs[1,1].set_xlim(self.th_time[0], self.th_time[-1])
+        axs[1,1].set_xlabel('T [s]')
+        axs[1,1].legend()
+        #vtor 
+        if self.tag_cxrs_vtor:
+            plot_time(np.transpose(self.cxrs_vtor), self.cxrs_vtor_time, self.cxrs_rho, [0.6,0.8,0.95], array_err=np.transpose(self.cxrs_vtor_err), ax=axs[2,1], tmin=0, tmax=-1, rhoavg=0, legend=False)
+        axs[2,1].set_ylabel(r'$v_{tor}$ $[km/s]$')
+        #Te
+        if self.tag_th_te:
+            plot_time(self.th_te/1e3, self.th_time, self.th_rho, [0.6,0.8,0.95], array_err=self.th_te_err/1e3, ax=axs[0,2], tmin=0, tmax=-1, rhoavg=0.1, legend=False)
+        axs[0,2].set_ylabel(r'$T_e$ $[keV]$')
+        #Ti
+        if self.tag_cxrs_ti:
+            plot_time(np.transpose(self.cxrs_ti/1e3), self.cxrs_time, self.cxrs_rho, [0.6,0.8,0.95], array_err=np.transpose(self.cxrs_ti_err/1e3), ax=axs[1,2], tmin=0, tmax=-1, rhoavg=0, legend=False)
+        axs[1,2].set_ylabel(r'$T_i$ $[keV]$')
+        #Te/Ti
+        if self.tag_th_te:
+            plot_time(self.th_te, self.th_time, self.th_rho, [0.9], array_err=self.th_te_err, ax=axs[2,2], tmin=0, tmax=-1, rhoavg=0.1, label=r'$T_e$ $\rho=0.9$', color='blue')
+        if self.tag_cxrs_ti:
+            plot_time(np.transpose(self.cxrs_ti), self.cxrs_time, self.cxrs_rho, [0.9], array_err=np.transpose(self.cxrs_ti_err), ax=axs[2,2], tmin=0, tmax=-1, rhoavg=0, label=r'$T_i$, $\rho=0.9$', color='red')
+            axs[2,2].set_xlim(self.cxrs_time[0], self.cxrs_time[-1])
+        axs[2,2].set_ylabel(r'$T_e$, $T_i$ $[eV]$')
         
-        plt.tight_layout()
+        
+        axs[0,1].legend(fontsize='10')
+    
+        # plt.tight_layout()
 
 
 
@@ -773,13 +881,10 @@ def plot_profiles_comparison(shot_list, time_list, rhomin=None, rhomax=None):
     if len(shot_list) != len(time_list):
         print('\n --- choosing same time for all shots --- ')
         th_time_ind_list = [get_closest_ind(list_obj_tcv[i].th_time, time_list[0]) for i in range(len(list_obj_tcv))]
-        cxrs_time_ind_list = [get_closest_ind(list_obj_tcv[i].cxrs_time, time_list[0]) for i in range(len(list_obj_tcv))]
-        
+    
     th_time_ind_list = [get_closest_ind(list_obj_tcv[i].th_time, time_list[i]) for i in range(len(list_obj_tcv))]
-    cxrs_time_ind_list = [get_closest_ind(list_obj_tcv[i].cxrs_time, time_list[i]) for i in range(len(list_obj_tcv))]
-    cxrs_vtor_time_ind_list = [get_closest_ind(list_obj_tcv[i].cxrs_vtor_time, time_list[i]) for i in range(len(list_obj_tcv))]
     
-    
+ 
     # color_list = ['blue', 'red', 'green', 'black', 'orange', 'purple', 'brown', 'pink', 'grey', 'cyan']
     # marker_list = 
     fig ,axs = prep_multiple_subplots(2,2, figsize=(8,5), axgrid=[0,1,2,3], sharex=True)
@@ -794,17 +899,11 @@ def plot_profiles_comparison(shot_list, time_list, rhomin=None, rhomax=None):
         axs[0,1].plot(list_obj_tcv[i].th_rho, list_obj_tcv[i].th_te[:,th_time_ind_list[i]]/1e3 ,marker='+', 
                       label='#{}, T={:.3f}'.format(shot_list[i], list_obj_tcv[i].th_time[th_time_ind_list[i]]),  color=color_list[i])
         
-        axs[1,0].plot(list_obj_tcv[i].cxrs_rho, list_obj_tcv[i].cxrs_vtor[cxrs_vtor_time_ind_list[i],:],marker='+',
-                        label='#{}, T={:.3f}'.format(shot_list[i], list_obj_tcv[i].cxrs_vtor_time[cxrs_vtor_time_ind_list[i]]), color=color_list[i])
-        
+    
         axs[0,0].plot(list_obj_tcv[i].th_rho, list_obj_tcv[i].th_ne[:,th_time_ind_list[i]]/10**19,marker='+', 
                       label='#{}, T={:.3f}'.format(shot_list[i], list_obj_tcv[i].th_time[th_time_ind_list[i]]), color=color_list[i])
         
-        axs[1,1].plot(list_obj_tcv[i].cxrs_rho, list_obj_tcv[i].cxrs_ti[cxrs_time_ind_list[i],:]/1e3,marker='+', 
-                      label='#{}, T={:.3f}'.format(shot_list[i], list_obj_tcv[i].cxrs_time[cxrs_time_ind_list[i]]), color=color_list[i])
- 
-        # axs[0,0].axvline(list_obj_tcv[i].th_time[th_time_ind_list[i]], color=color_list[i])
- 
+      
     axs[0,0].legend(fontsize="8")
     # axs[0,1].legend()
     # axs[1,1].legend()
@@ -814,6 +913,32 @@ def plot_profiles_comparison(shot_list, time_list, rhomin=None, rhomax=None):
     axs[1,1].set_ylabel(r'$T_i$ $[keV]$')
     axs[1,0].set_xlabel(r'$\rho$')
     axs[1,1].set_xlabel(r'$\rho$')
+    
+    
+    #Data CXRS 
+    try:
+        if len(shot_list) != len(time_list):
+            print('\n --- choosing same time for all shots --- ')
+            cxrs_time_ind_list = [get_closest_ind(list_obj_tcv[i].cxrs_time, time_list[0]) for i in range(len(list_obj_tcv))]
+             
+        cxrs_time_ind_list = [get_closest_ind(list_obj_tcv[i].cxrs_time, time_list[i]) for i in range(len(list_obj_tcv))]
+        cxrs_vtor_time_ind_list = [get_closest_ind(list_obj_tcv[i].cxrs_vtor_time, time_list[i]) for i in range(len(list_obj_tcv))]
+        
+        for i in range(len(list_obj_tcv)):
+         
+            axs[1,0].plot(list_obj_tcv[i].cxrs_rho, list_obj_tcv[i].cxrs_vtor[cxrs_vtor_time_ind_list[i],:],marker='+',
+                            label='#{}, T={:.3f}'.format(shot_list[i], list_obj_tcv[i].cxrs_vtor_time[cxrs_vtor_time_ind_list[i]]), color=color_list[i])
+            
+            axs[1,1].plot(list_obj_tcv[i].cxrs_rho, list_obj_tcv[i].cxrs_ti[cxrs_time_ind_list[i],:]/1e3,marker='+', 
+                        label='#{}, T={:.3f}'.format(shot_list[i], list_obj_tcv[i].cxrs_time[cxrs_time_ind_list[i]]), color=color_list[i])
+    
+      
+        axs[0,0].legend(fontsize="8")
+
+    except:
+        print('No CXRS data')
+    
+    
     
     #     ax_te.plot(list_obj_tcv[i].th_rho, list_obj_tcv[i].th_te[:,th_time_ind_list[i]],marker='+', label='#{}, T={:.3f}'.format(shot_list[i], list_obj_tcv[i].th_time[th_time_ind_list[i]]))
     #     ax_ne.plot(list_obj_tcv[i].th_rho, list_obj_tcv[i].th_ne[:,th_time_ind_list[i]]/10**19,marker='+', label='#{}, T={:.3f}'.format(shot_list[i], list_obj_tcv[i].th_time[th_time_ind_list[i]]))
@@ -825,75 +950,7 @@ def plot_profiles_comparison(shot_list, time_list, rhomin=None, rhomax=None):
 
 
 
-#%% preparation profiles 2322 545
-#I want first to print heating schemes for shots listed here, then I want to produce profiles at each step of heating scheme for each shot.
-#I will use the class TCVShot to do so.
 
-
-### Bloc ohmic heating ###
-# shot=80156
-# a=TCVShot(shot)
-# a.plot_summary()
-# plot_profiles_comparison([shot], [1.3])
-
-
-### Bloc ECRH heating ###
-# shot=80163
-# a=TCVShot(shot)
-# a.plot_summary()
-# plot_profiles_comparison([shot], [1.3])
-
-# shot=80336
-# a=TCVShot(shot)
-# a.plot_summary()
-# plot_profiles_comparison([shot], [1])
-
-### Bloc mixed heating ###
-# shot=80162
-# a=TCVShot(shot)
-# a.plot_summary()
-# plot_profiles_comparison([shot, shot, shot, shot], [1, 1.2, 1.6, 1.85])
-
-# shot=80257
-# a=TCVShot(shot)
-# a.plot_summary()
-# plot_profiles_comparison([shot, shot, shot, shot], [1, 1.2, 1.6, 1.85])
-
-# shot=80322
-# a=TCVShot(shot)
-# a.plot_summary()
-# plot_profiles_comparison([shot, shot, shot, shot], [1, 1.2, 1.6, 1.8])
-
-
-### Bloc toroidal rotation ###
-
-# shot=80324
-# a=TCVShot(shot)
-# a.plot_summary()
-# plot_profiles_comparison([shot, shot], [0.9, 1.4])
-
-# shot=80328
-# a=TCVShot(shot)
-# a.plot_summary()
-# plot_profiles_comparison([shot, shot], [0.9, 1.4])
-
-# shot=80745
-# a=TCVShot(shot)
-# a.plot_summary()
-# plot_profiles_comparison([shot, shot, shot], [0.8, 1.2, 1.7])
-            
-# shot=80753
-# a=TCVShot(shot)
-# a.plot_summary()
-# plot_profiles_comparison([shot, shot, shot], [0.8, 1.2, 1.7])
-
-
-### Bloc density ramp ###
-
-# shot=80376
-# a=TCVShot(shot)
-# a.plot_summary()
-# plot_profiles_comparison([80376, 80376], [1, 1.5])
             
 #%% Function to store
 
@@ -1026,6 +1083,7 @@ def plot_Ti_time(shot, rho_list, remove_zeros=True):
         
         plt.title(r'#{}'.format(shot))
         plt.tight_layout()
+
 
 
 

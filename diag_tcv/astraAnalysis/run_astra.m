@@ -1,5 +1,5 @@
 %shot = 80257;
-47778
+%47778
 params.kin_par.AMJ = 2;
 params.kin_par.ABEAM = 2;
 params.kin_par.ZBEAM = 1;
@@ -36,3 +36,45 @@ plot(rho(:,itime),abs((a(:,itime)-b(:,itime))))
 
 figure;
 pcolor(transpose(a)-transpose(b));
+
+
+%quick shot analysis
+shot = 80935
+time_window=[0.6:0.01:2]
+[dataH] = astra_tcv_automatic(shot, time_window);%, "params", params);
+time2plot = [];
+figure2plot = 7000;
+what2plot = {'power_time', 'power_profile',  'NB_time'};
+ASTRA_TCV_summary(dataH,time2plot,figure2plot,what2plot);
+
+
+
+%Comparison fluxes D/H for matching profiles
+shot = 80257;
+time_window=[1.55:0.01:1.65];
+[dataD] = astra_tcv_automatic(shot, time_window);%, "params", params);
+
+shot = 80931;
+time_window=[0.65:0.01:0.85];
+[dataH] = astra_tcv_automatic(shot, time_window);%, "params", params);
+
+itime=50;
+TH = dataH.out.T;
+rhoH = dataH.out.RHOPSI;
+TD = dataD.out.T;
+rhoD = dataD.out.RHOPSI;
+HQIEFF = dataH.out.QIEFF;
+HQEEFF = dataH.out.QEEFF;
+DQIEFF = dataD.out.QIEFF;
+DQEEFF = dataD.out.QEEFF;
+a=HQIEFF(:,:)./(HQIEFF(:,:)+HQEEFF(:,:));
+b=DQIEFF(:,:)./(DQIEFF(:,:)+DQEEFF(:,:));
+
+figure;
+itimeD = 30
+itimeH = 35
+plot(rhoH(:,itimeH),a(:,itimeH), 'r');hold on;
+plot(rhoD(:,itimeD),b(:,itimeD), 'b');
+legend('HQIEFF/(HQIEFF+HQEEFF)', 'DQIEFF/(DQIEFF+DQEEFF)');
+title(sprintf('T=%d, %d',TD(itimeD), TH(itimeH))); 
+grid;

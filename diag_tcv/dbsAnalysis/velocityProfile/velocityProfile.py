@@ -41,7 +41,7 @@ plt.axhline(0, color='black')
 # %% plot same shot for different sweeps
 
 # machine, shot, isweep_list, xmode, channelvals = 'tcv', 80745, [9,11, 13], 1, [1,2]
-machine, shot, isweep_list, xmode, channelvals = 'tcv', 80745, [17,18], 1, [1]
+machine, shot, isweep_list, xmode, channelvals = 'tcv', 80376, [17,18], 1, [1]
 
 color_list = ['blue', 'red', 'green', 'purple']
 marker_list = ['+', 'o', 'x', 'd', '8']
@@ -59,8 +59,10 @@ for i in range(len(isweep_to_plot)):
     prof.plot(ax=ax, color=color_list[i], marker=marker_list[i],ls='--', lw=1,errorbars=True, **plots_kwargs)
     
 ax.grid()
+plt.axvline(1.00, color='black')
+plt.axhline(0, color='black')
 # ax.set_xlim(0.65, 0.9)
-ax.set_ylim(-3.2, -0.9)
+# ax.set_ylim(-3.2, -0.9)
 ax.legend(loc='upper left')
 
 plt.tight_layout()
