@@ -263,6 +263,10 @@ class TCVShot():
         try:
             self.nb1 = self.tree.getNode('\RESULTS::NB1:POWR_TCV').data()
             self.tag_nb1 = True
+            
+            self.nb1_ref = self.tree.getNode('\ATLAS::NB1.DATA.MODEL:POWR_NEUTRAL').data()
+            self.nb1_ref_time = self.tree.getNode('\ATLAS::NB1.DATA.MODEL:POWR_NEUTRAL').dim_of().data()
+            
         except:    
             print('No NB1 data')
             self.tag_nb1 = False
@@ -270,6 +274,9 @@ class TCVShot():
         try:
             self.nb2 = self.tree.getNode('\RESULTS::NB2:POWR_TCV').data()
             self.tag_nb2 = True
+            
+            self.nb2_ref = self.tree.getNode('\ATLAS::NB2.DATA.MODEL:POWR_NEUTRAL').data()
+            self.nb2_ref_time = self.tree.getNode('\ATLAS::NB2.DATA.MODEL:POWR_NEUTRAL').dim_of().data()
             
         except:
             print('No NB2 data')
@@ -776,15 +783,23 @@ class TCVShot():
             if self.tag_nb1:
                 if color is None:
                     ax.plot(self.nbi_time, self.nb1*1e3, color='red', label='NB1')
+                    ax.plot(self.nb1_ref_time, self.nb1_ref*1e3, color='xkcd:dark red', label='NB1 ref')
                 else:
                     ax.plot(self.nbi_time, self.nb1*1e3,linestyle='--', marker='o', linewidth=0.2, markersize=5, markevery=500, color=color, label='NB1')
                 
-            if self.tag_nb2:
-                if color is None:
-                    ax.plot(self.nbi_time, self.nb2*1e3, color='green', label='NB2')
-                else:
-                    ax.plot(self.nbi_time, self.nb2*1e3, linestyle='dotted', color=color, label='NB2')
-                        
+        if self.tag_nb2:
+            if color is None:
+                ax.plot(self.nbi_time, self.nb2*1e3, color='green', label='NB2')
+                ax.plot(self.nb2_ref_time, self.nb2_ref*1e3, color='xkcd:dark green', label='NB2 ref')
+            else:
+                ax.plot(self.nbi_time, self.nb2*1e3, linestyle='dotted', color=color, label='NB2')
+        
+        if self.tag_nb1 and self.tag_nb2:
+            if color is None:
+                ax.plot(self.nbi_time, self.nb1*1e3 + self.nb2*1e3, color='blue', label='NBtot')
+            else:
+                ax.plot(self.nbi_time, self.nb1*1e3 + self.nb2*1e3, linestyle='-.', color=color, label='NBtot')
+                
         if self.tag_ecrh:
             if color is None:
                 ax.plot(self.ecrh_time, self.ecrh_tot, color='xkcd:dark yellow', label='ECRH tot')
@@ -869,7 +884,7 @@ class TCVShot():
 
 
 
-def plot_profiles_comparison(shot_list, time_list, rhomin=None, rhomax=None):
+def plot_profiles_comparison(shot_list, time_list, rhomin=None, rhomax=None, tavg=None):
     
     list_obj_tcv = [TCVShot(shot) for shot in shot_list]
     
@@ -888,19 +903,29 @@ def plot_profiles_comparison(shot_list, time_list, rhomin=None, rhomax=None):
     # color_list = ['blue', 'red', 'green', 'black', 'orange', 'purple', 'brown', 'pink', 'grey', 'cyan']
     # marker_list = 
     fig ,axs = prep_multiple_subplots(2,2, figsize=(8,5), axgrid=[0,1,2,3], sharex=True)
-    fig.suptitle('#{}'.format(shot_list))
+    fig.suptitle('#{} ; tavg = {}'.format(shot_list, tavg))
     
     # fig, ax_te = plot_1d([], [], grid=True, xlabel=r'$\rho$', ylabel=r'$T_e$ $[eV]$')
     # fig, ax_ne = plot_1d([], [], grid=True, xlabel=r'$\rho$', ylabel=r'$n_e$ $[10^{19} m^{-3}]$')
     # fig, ax_ti = plot_1d([], [], grid=True, xlabel=r'$\rho$', ylabel=r'$T_i$ $[eV]$')
     for i in range(len(list_obj_tcv)):
         
+        if tavg is not None:
+            tmin_ind = get_closest_ind(list_obj_tcv[i].th_time, list_obj_tcv[i].th_time[th_time_ind_list[i]]-tavg/2)
+            tmax_ind = get_closest_ind(list_obj_tcv[i].th_time, list_obj_tcv[i].th_time[th_time_ind_list[i]]+tavg/2)
+            # print(tmin_ind, tmax_ind)
+            th_te = np.mean(list_obj_tcv[i].th_te[:, tmin_ind:tmax_ind], axis=1)
+            th_ne = np.mean(list_obj_tcv[i].th_ne[:, tmin_ind:tmax_ind], axis=1)
+        else:
+            th_te = list_obj_tcv[i].th_te[:,th_time_ind_list[i]]
+            th_ne = list_obj_tcv[i].th_ne[:,th_time_ind_list[i]]
+        
         # list_obj_tcv[i].plot_heating(ax=axs[0,0], color=color_list[i])
-        axs[0,1].plot(list_obj_tcv[i].th_rho, list_obj_tcv[i].th_te[:,th_time_ind_list[i]]/1e3 ,marker='+', 
+        axs[0,1].plot(list_obj_tcv[i].th_rho, th_te/1e3 ,marker='+', 
                       label='#{}, T={:.3f}'.format(shot_list[i], list_obj_tcv[i].th_time[th_time_ind_list[i]]),  color=color_list[i])
         
     
-        axs[0,0].plot(list_obj_tcv[i].th_rho, list_obj_tcv[i].th_ne[:,th_time_ind_list[i]]/10**19,marker='+', 
+        axs[0,0].plot(list_obj_tcv[i].th_rho, th_ne/10**19,marker='+', 
                       label='#{}, T={:.3f}'.format(shot_list[i], list_obj_tcv[i].th_time[th_time_ind_list[i]]), color=color_list[i])
         
       
@@ -925,11 +950,26 @@ def plot_profiles_comparison(shot_list, time_list, rhomin=None, rhomax=None):
         cxrs_vtor_time_ind_list = [get_closest_ind(list_obj_tcv[i].cxrs_vtor_time, time_list[i]) for i in range(len(list_obj_tcv))]
         
         for i in range(len(list_obj_tcv)):
+            
+            if tavg is not None:
+                tmin_ind = get_closest_ind(list_obj_tcv[i].cxrs_vtor_time, list_obj_tcv[i].cxrs_vtor_time[cxrs_vtor_time_ind_list[i]]-tavg/2)
+                tmax_ind = get_closest_ind(list_obj_tcv[i].cxrs_vtor_time, list_obj_tcv[i].cxrs_vtor_time[cxrs_vtor_time_ind_list[i]]+tavg/2)
+                # print(tmin_ind, tmax_ind)
+                cxrs_vtor = np.mean(list_obj_tcv[i].cxrs_vtor[tmin_ind:tmax_ind, :], axis=0)
+                
+                tmin_ind = get_closest_ind(list_obj_tcv[i].cxrs_time, list_obj_tcv[i].cxrs_time[cxrs_time_ind_list[i]]-tavg/2)
+                tmax_ind = get_closest_ind(list_obj_tcv[i].cxrs_time, list_obj_tcv[i].cxrs_time[cxrs_time_ind_list[i]]+tavg/2)
+               
+                cxrs_ti = np.mean(list_obj_tcv[i].cxrs_ti[tmin_ind:tmax_ind, :], axis=0)
+            else:
+                cxrs_vtor = list_obj_tcv[i].cxrs_vtor[cxrs_vtor_time_ind_list[i], :]
+                cxrs_ti = list_obj_tcv[i].cxrs_ti[cxrs_time_ind_list[i], :]
+        
          
-            axs[1,0].plot(list_obj_tcv[i].cxrs_rho, list_obj_tcv[i].cxrs_vtor[cxrs_vtor_time_ind_list[i],:],marker='+',
+            axs[1,0].plot(list_obj_tcv[i].cxrs_rho, cxrs_vtor ,marker='+',
                             label='#{}, T={:.3f}'.format(shot_list[i], list_obj_tcv[i].cxrs_vtor_time[cxrs_vtor_time_ind_list[i]]), color=color_list[i])
             
-            axs[1,1].plot(list_obj_tcv[i].cxrs_rho, list_obj_tcv[i].cxrs_ti[cxrs_time_ind_list[i],:]/1e3,marker='+', 
+            axs[1,1].plot(list_obj_tcv[i].cxrs_rho, cxrs_ti/1e3,marker='+', 
                         label='#{}, T={:.3f}'.format(shot_list[i], list_obj_tcv[i].cxrs_time[cxrs_time_ind_list[i]]), color=color_list[i])
     
       

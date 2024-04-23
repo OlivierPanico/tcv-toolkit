@@ -18,9 +18,10 @@ from DBS import definitions
 
 machine = 'tcv'
 
-shot, twindow = 80935, [1.6,1.7]
+# shot, twindow = 80935, [1.6,1.7]
 # shot, twindow = 80162, [1,1.2]
 # shot, twindow = 80839, [0.8,1]
+shot, twindow = 80957, [1, 1.2]
 
 modex, anglepol, zshift = 1, -50, 0.0
 
