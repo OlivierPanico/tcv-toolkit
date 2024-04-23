@@ -175,3 +175,46 @@ plot(rhoD(:,itimeD),b(:,itimeD), 'b');
 legend('HQIEFF/(HQIEFF+HQEEFF)', 'DQIEFF/(DQIEFF+DQEEFF)');
 title(sprintf('T=%d, %d',TD(itimeD), TH(itimeH))); 
 grid;
+
+
+
+
+
+
+%Estimate flux partition in rotation ANK
+shot = 80964
+time_window=[0.6:0.01:2]
+[dataD] = astra_tcv_automatic(shot, time_window);%, "params", params);
+time2plot = [];
+%figure2plot = 7000;
+%what2plot = {'power_time', 'power_profile',  'NB_time'};
+%ASTRA_TCV_summary(dataH,time2plot,figure2plot,what2plot);
+
+shot = 80957
+time_window=[0.6:0.01:2]
+[dataH] = astra_tcv_automatic(shot, time_window);
+time2plot = [];
+%figure2plot = 7000;
+%what2plot = {'power_time', 'power_profile',  'NB_time'};
+ASTRA_TCV_summary(dataH,time2plot,figure2plot,what2plot);
+TD = dataD.out.T;
+rhoD = dataD.out.RHOPSI;
+DQIEFF = dataD.out.QIEFF;
+DQEEFF = dataD.out.QEEFF;
+Dflux_partition=DQIEFF(:,:)./(DQIEFF(:,:)+DQEEFF(:,:));
+TH = dataH.out.T;
+rhoH = dataH.out.RHOPSI;
+HQIEFF = dataH.out.QIEFF;
+HQEEFF = dataH.out.QEEFF;
+Hflux_partition=HQIEFF(:,:)./(HQIEFF(:,:)+HQEEFF(:,:));
+
+itime1 = 61;
+itime2 = 127;
+figure;
+
+plot(TD,Dflux_partition(43,:), 'b');hold on;
+plot(TH,Hflux_partition(43,:), 'r');hold on;
+legend('deuterium', 'hydrogen');
+ylabel('QIEFF/(QIEFF+QEEFF)');
+title(sprintf('rho=%d',mean(rho(43,:)))); 
+grid;
