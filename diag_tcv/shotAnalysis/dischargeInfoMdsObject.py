@@ -17,6 +17,8 @@ import pandas as pd
 #DBS
 # from DBS.beamtracing.src.tcv.io import retrieve_plasma_data #for density and mag eq
 # from DBS import definitions as defs
+from DBS.beamtracing.src.equilibrium import Equilibrium2d
+
 
 #dataAnalysis
 from dataAnalysis.utils.plot_utils import prep_multiple_subplots, plot_1d, plot_2d, get_cmap_list
@@ -223,6 +225,10 @@ class TCVShot():
         self.cmap = cmap
         
         self.tag_th_fit=False
+        
+        #mag eq
+        self.tag_eq_mag = False
+        self.tag_btor=False
         self.tag_q=False
 
     def get_thomson_fit(self):
@@ -466,6 +472,69 @@ class TCVShot():
             self.h_factor_model = ''
 
 
+    def get_mag_eq_object(self, time):
+        print('\n Loading magnetic equilibrium object at t={}'.format(time))
+        
+        try:
+            equil_object = Equilibrium2d('tcv', self.shot, time)
+            mag_eq = equil_object.from_shot('tcv', self.shot, time)
+            self.mag_eq = mag_eq
+            
+            psiN = ((self.mag_eq['psi'] - self.mag_eq['psiaxe']) / (self.mag_eq['psibnd'] - self.mag_eq['psiaxe']))
+            self.mag_eq['rho_psi'] = np.sqrt(psiN)
+            
+            self.tag_mag_eq = True
+        except:
+            print('No magnetic equilibrium object')
+            self.mag_eq = None
+            self.tag_mag_eq = False
+
+
+    def get_btor(self, time):
+        
+        '''
+        btor is a function of (r,z) but usually does not depend much on z
+        '''
+        print('\n Loading Btor at t={}'.format(time))
+        
+        try:
+            self.get_mag_eq_object(time)
+            self.btor = self.mag_eq['Btor']
+            self.tag_btor = True
+        except:
+            print('No Btor data')
+            self.tag_btor = False
+            self.btor = None
+
+    def get_rho_s(self, time):
+        '''
+        sound larmor radius from thomson temperature and mag eq
+        '''
+        
+        if self.tag_btor==False or self.tag_th_fit==False:
+            try:
+                self.get_thomson_fit()
+                self.get_btor(time)
+            except:
+                print(" can't load larmor radius: check btor or Thomson data")
+                self.tag_rho_s = False
+                self.rho_s = None         
+
+        th_te_ind = get_closest_ind(self.th_time, time)
+        
+        cs = np.sqrt(e*self.th_te[:, th_te_ind]/(m_i))  #sound speed in m/s
+        print('ok sound speed')
+        
+        _btor_loc = 1.44#np.mean(self.btor, axis=1) #Avg btor over z to have radial estimate
+        
+        omega_cs = (e*_btor_loc)/(m_i) #frequency in s**-1
+        print('ok cycl freq')
+        # return cs, omega_cs
+        self.rho_s = cs/omega_cs #sound larmor radius in m
+        print('ok rho_s')
+        self.tag_rho_s = True
+        print('ok tag')
+        
     def get_r_and_R(self, twindow=None):
         ''' 
         Careful => long due to matlab call 
@@ -487,7 +556,7 @@ class TCVShot():
         _theta_str = f"[0,90,180,270]"
         ml_code = f"[result.coord,result.time] = tcv_coordinate_conversion({self.shot},{_time_str},{_rho_str},{_theta_str},'p','LIUQE.M');"
         result = run_matlab_code(ml_code, logdir=None)
-
+    
         R = np.mean(result.coord.R, axis=1)
         
         #Small r from mds
@@ -813,7 +882,6 @@ class TCVShot():
         if self.tag_ecrh and self.tag_nbi:
             ax.set_xlim(max(self.ecrh_time[0], self.nbi_time[0]), min(self.ecrh_time[-1], self.nbi_time[-1]))
         
-    
     def plot_summary(self):
         
         
@@ -1123,8 +1191,5 @@ def plot_Ti_time(shot, rho_list, remove_zeros=True):
         
         plt.title(r'#{}'.format(shot))
         plt.tight_layout()
-
-
-
 
 

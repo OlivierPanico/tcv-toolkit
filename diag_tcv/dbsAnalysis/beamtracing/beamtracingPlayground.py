@@ -21,13 +21,15 @@ machine = 'tcv'
 # shot, twindow = 80935, [1.6,1.7]
 # shot, twindow = 80162, [1,1.2]
 # shot, twindow = 80839, [0.8,1]
-shot, twindow = 80957, [1, 1.2]
+# shot, twindow = 80957, [0.4, 0.6]
+# shot, twindow = 80985, [1, 1.2]
+shot, twindow = 80940, [0.7, 0.9]
 
 modex, anglepol, zshift = 1, -50, 0.0
 
 # FreqGHz = np.linspace(48.5, 75, 6)
 # FreqGHz = [51, 56, 58, 61, 65, 70, 72.5, 66, 62, 55, 50, 53, 59, 63, 67, 71, 73, 64, 60, 54]#np.linspace(48, 70, 6)
-FreqGHz = [59, 69]
+FreqGHz = [62, 69]
 
 # time to chose for the equilibrium snapshot:
 time = np.mean(twindow)
@@ -97,10 +99,6 @@ ax.legend(loc='lower right')
 
 print('anglepol = {}, zshift = {}:'.format(anglepol, zshift))
 print(f'freq = {FreqGHz},\nrho = {outp.rho},\nkperp = {outp.k_perp}\n')
-
-
-
-
 
 
 

@@ -75,57 +75,7 @@ ax.set_xlabel(r'$\rho$')
 plt.yscale('log')
 
 
-#%% Profile comparison 
 
-# a = TCVShot(80930)
-# a.plot_summary()
-# plot_profiles_comparison([80930, 80930, 80930], [0.8, 1.2, 1.8])
-
-# a=TCVShot(80931)
-# a.plot_summary()
-# plot_profiles_comparison([80931, 80931, 80931], [0.8, 1.2, 1.8])
-
-
-# a=TCVShot(80935)
-# a.plot_summary()
-# plot_profiles_comparison([80935, 80935, 80935], [0.8, 1.2, 1.8])
-
-# a=TCVShot(80939)
-# a.plot_summary()
-# plot_profiles_comparison([80939, 80939, 80939], [0.8, 1.2, 1.8])
-
-
-### Same pattern repeated 3 times
-
-# a=TCVShot(80940)
-# a.plot_summary()
-# plot_profiles_comparison([80940, 80940, 80940], [0.8, 1.2, 1.8])
-
-# a=TCVShot(80942)
-# a.plot_summary()
-# plot_profiles_comparison([80942, 80942, 80942], [0.8, 1.2, 1.8])
-
-# a=TCVShot(80945)
-# a.plot_summary()
-# plot_profiles_comparison([80945, 80945, 80945], [0.8, 1.2, 1.8])
-
-# a=TCVShot(80946)
-# a.plot_summary()
-# plot_profiles_comparison([80946, 80946, 80946], [0.8, 1.2, 1.8])
-
-
-# a=TCVShot(80947)
-# a.plot_summary()
-# plot_profiles_comparison([80947, 80947], [1, 1.4])
-
-# a=TCVShot(80949)
-# a.plot_summary()
-# plot_profiles_comparison([80949, 80949], [1, 1.4])
-
-
-# a=TCVShot(80951)
-# a.plot_summary()
-# plot_profiles_comparison([80951, 80951], [1, 1.4])
 
 # %%
 # plot_profiles_comparison([80322, 80946], [1, 0.8])
