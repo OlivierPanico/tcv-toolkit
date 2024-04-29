@@ -18,7 +18,7 @@ from diag_tcv.dbsAnalysis.correlationAnalysis.channelsCorrelation import get_raw
 from DBS.io.read import get_DBS_params #Channels params (dt, freq, ...)
 from DBS import definitions as defs #Location of data
 from DBS.io.interface import DataInterface #General class for DBS data
-from DBS.processing.sigprocessing import remove_noisy_signal_edges, get_normalized_complex_signal
+from DBS.processing.sigprocessing import remove_signal_edges, get_normalized_complex_signal
 from DBS.beamtracing.interface import Beam3dInterface #raytracing
 from DBS.beamtracing.DBSbeam import _DBSbeam
 #dataAnalysis
@@ -185,27 +185,35 @@ class CorrelationAnalysis(TCVShot):
         I_hop_list = self.rawSigDic['I_list_hop']
         Q_hop_list = self.rawSigDic['Q_list_hop']
         
-        t_reduced, _ = remove_noisy_signal_edges(t[0,:], I_ref_list[0,:], dt0=400.e-6, dtend=100.e-6, axis=-1)
+        t_reduced, _ = remove_signal_edges(t[0,:], I_ref_list[0,:], dtstart=400.e-6, dtend=100.e-6, axis=-1)
        
         z_list_ref = np.zeros((len(freq_list_hop), len(t_reduced)), dtype='complex')
         z_list_hop = np.zeros((len(freq_list_hop), len(t_reduced)), dtype='complex')
         
+        t_reduced_list_ref = np.zeros((len(freq_list_hop), len(t_reduced)))
+        t_reduced_list_hop = np.zeros((len(freq_list_hop), len(t_reduced)))
+        
         for i in range(len(freq_list_hop)):
-            _,I_ref_loc = remove_noisy_signal_edges(t[i,:], I_ref_list[i,:], dt0=400.e-6, dtend=100.e-6, axis=-1)
-            _,Q_ref_loc = remove_noisy_signal_edges(t[i,:], Q_ref_list[i,:], dt0=400.e-6, dtend=100.e-6, axis=-1)
+            t_reduced_ref_loc,I_ref_loc = remove_signal_edges(t[i,:], I_ref_list[i,:], dtstart=400.e-6, dtend=100.e-6, axis=-1)
+            _,Q_ref_loc = remove_signal_edges(t[i,:], Q_ref_list[i,:], dtstart=400.e-6, dtend=100.e-6, axis=-1)
     
             z_ref_loc = get_normalized_complex_signal(I_ref_loc, Q_ref_loc, self.rawSigDic['params_ref'].phase_cor)
             
-            _,I_hop_loc = remove_noisy_signal_edges(t[i,:], I_hop_list[i,:], dt0=400.e-6, dtend=100.e-6, axis=-1)
-            _,Q_hop_loc = remove_noisy_signal_edges(t[i,:], Q_hop_list[i,:], dt0=400.e-6, dtend=100.e-6, axis=-1)
+            t_reduced_hop_loc,I_hop_loc = remove_signal_edges(t[i,:], I_hop_list[i,:], dtstart=400.e-6, dtend=100.e-6, axis=-1)
+            _,Q_hop_loc = remove_signal_edges(t[i,:], Q_hop_list[i,:], dtstart=400.e-6, dtend=100.e-6, axis=-1)
     
             z_hop_loc = get_normalized_complex_signal(I_hop_loc, Q_hop_loc, self.rawSigDic['params_hop'].phase_cor)
         
             z_list_ref[i,:] = z_ref_loc
             z_list_hop[i,:] = z_hop_loc
+            
+            t_reduced_list_ref[i,:] = t_reduced_ref_loc
+            t_reduced_list_hop[i,:] = t_reduced_hop_loc 
         
         corrSigDic = dict()
         corrSigDic['t'] = t
+        corrSigDic['t_reduced_list_ref'] = t_reduced_list_ref
+        corrSigDic['t_reduced_list_hop'] = t_reduced_list_hop
         corrSigDic['freq_list_ref'] = self.rawSigDic['freq_list_ref']
         corrSigDic['freq_list_hop'] = freq_list_hop
         corrSigDic['z_list_ref'] = z_list_ref
@@ -274,10 +282,10 @@ class CorrelationAnalysis(TCVShot):
         
     
     def wrapper_coherence_analysis(self, isweep, ifreq_list, method='spectral'):
-        a.get_raw_data_list(isweep, ifreq_list)
-        a.get_normalized_data_list()
-        a.get_coherence_list(method=method)
-        a.get_raytracing_data()
+        self.get_raw_data_list(isweep, ifreq_list)
+        self.get_normalized_data_list()
+        self.get_coherence_list(method=method)
+        # self.get_raytracing_data()
         
  
 
@@ -330,20 +338,20 @@ class CorrelationAnalysis(TCVShot):
 #             a.corrSigDic['coh_max_list'], marker='+')
 
 
-a=CorrelationAnalysis(80257)
-isweep_list=[2]
-ifreq_list=np.linspace(20,39,20)
-for i,sweeploc in enumerate(isweep_list):
-    a.wrapper_coherence_analysis(sweeploc, ifreq_list, method='time')
+# a=CorrelationAnalysis(80257)
+# isweep_list=[2]
+# ifreq_list=np.linspace(20,39,20)
+# for i,sweeploc in enumerate(isweep_list):
+#     a.wrapper_coherence_analysis(sweeploc, ifreq_list, method='time')
    
-#%%
-fig, ax = plot_1d([],[], grid=True)
-ax.plot(a.rho_list_hop[20:40], a.corrSigDic['coh_max_list'], marker='+', color='blue')
-ax.axvline(np.mean(a.rho_list_ref[20:40]), color='black')
-ax.set_xlabel(r'$\Delta_\rho$')
-ax.set_ylabel('coherence')
-plt.yscale('log')
-plt.title('#{} ; sweep {}'.format(80257, 2))
+# #%%
+# fig, ax = plot_1d([],[], grid=True)
+# ax.plot(a.rho_list_hop[20:40], a.corrSigDic['coh_max_list'], marker='+', color='blue')
+# ax.axvline(np.mean(a.rho_list_ref[20:40]), color='black')
+# ax.set_xlabel(r'$\Delta_\rho$')
+# ax.set_ylabel('coherence')
+# plt.yscale('log')
+# plt.title('#{} ; sweep {}'.format(80257, 2))
 
 
 # a=CorrelationAnalysis(80914)

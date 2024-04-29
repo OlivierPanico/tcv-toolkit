@@ -234,7 +234,7 @@ def correlation_channels(z_ref, z_hop, ifreq_list, mode='spectral'):
     return np.array(coh_max)
 
 #%%
-from DBS.processing.sigprocessing import remove_noisy_signal_edges, get_normalized_complex_signal
+from DBS.processing.sigprocessing import remove_signal_edges, get_normalized_complex_signal
 
 if __name__ == '__main__':
     
