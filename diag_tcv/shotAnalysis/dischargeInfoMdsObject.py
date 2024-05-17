@@ -49,11 +49,11 @@ cdict = {'red':   [[0.0,  0.0, 0.0],
 
 # cmap = LinearSegmentedColormap('custom', segmentdata=cdict, N=256)
 
-color_list = ['xkcd:blue', 'xkcd:red', 'xkcd:green', 'xkcd:teal', 'xkcd:orange', 'xkcd:magenta', 'brown', 'pink', 'grey', 'black']
+color_list = ['xkcd:blue', 'xkcd:red', 'xkcd:forest green', 'xkcd:teal', 'xkcd:orange', 'xkcd:magenta', 'brown', 'pink', 'grey', 'black']
 from matplotlib.colors import ListedColormap
 cmap = ListedColormap(color_list)
 
-marker_list = ['+', 's', 'x', 'o', 'v', '^', '<', '>', 'p', 'P', '*', 'h', 'H', 'X', 'd', '|', '_']
+marker_list = ['+', 'x', 's', 'o', 'v', '^', '<', '>', 'p', 'P', '*', 'h', 'H', 'X', 'd', '|', '_']
 
 
 ### INTERACTIVE FIGURES ###
@@ -878,7 +878,7 @@ class TCVShot():
 
         ax.set_ylabel('Power [kW]')
         ax.set_xlabel('T [s]')
-        ax.legend(fontsize='8')
+        ax.legend(fontsize='12')
         if self.tag_ecrh and self.tag_nbi:
             ax.set_xlim(max(self.ecrh_time[0], self.nbi_time[0]), min(self.ecrh_time[-1], self.nbi_time[-1]))
         
@@ -952,14 +952,14 @@ class TCVShot():
 
 
 
-def plot_profiles_comparison(shot_list, time_list, rhomin=None, rhomax=None, tavg=None):
+def plot_profiles_comparison(shot_list, time_list, plot_err=None, rhomin=None, rhomax=None, tavg=None):
     
     list_obj_tcv = [TCVShot(shot) for shot in shot_list]
     
    
     for i in range(len(list_obj_tcv)):
         list_obj_tcv[i].get_thomson_fit()
-        list_obj_tcv[i].get_cxrs_fit()
+        list_obj_tcv[i].get_cxrs_fit(set_nan_to_zero=True)
         
     if len(shot_list) != len(time_list):
         print('\n --- choosing same time for all shots --- ')
@@ -984,19 +984,33 @@ def plot_profiles_comparison(shot_list, time_list, rhomin=None, rhomax=None, tav
             # print(tmin_ind, tmax_ind)
             th_te = np.mean(list_obj_tcv[i].th_te[:, tmin_ind:tmax_ind], axis=1)
             th_ne = np.mean(list_obj_tcv[i].th_ne[:, tmin_ind:tmax_ind], axis=1)
+            
+            if plot_err:
+                th_te_err = np.mean(list_obj_tcv[i].th_te_err[:, tmin_ind:tmax_ind], axis=1)
+                th_ne_err = np.mean(list_obj_tcv[i].th_ne_err[:, tmin_ind:tmax_ind], axis=1)    
+            else:
+                th_te_err = np.zeros((np.shape(th_te)))
+                th_ne_err = np.zeros((np.shape(th_ne)))
+            
         else:
             th_te = list_obj_tcv[i].th_te[:,th_time_ind_list[i]]
             th_ne = list_obj_tcv[i].th_ne[:,th_time_ind_list[i]]
-        
+            if plot_err:
+                th_te_err = list_obj_tcv[i].th_te_err[:,th_time_ind_list[i]]
+                th_ne_err = list_obj_tcv[i].th_ne_err[:,th_time_ind_list[i]]
+            else:
+                th_te_err = np.zeros((np.shape(th_te)))
+                th_ne_err = np.zeros((np.shape(th_ne)))
+                                
         # list_obj_tcv[i].plot_heating(ax=axs[0,0], color=color_list[i])
-        axs[0,1].plot(list_obj_tcv[i].th_rho, th_te/1e3 ,marker='+', 
-                      label='#{}, T={:.3f}'.format(shot_list[i], list_obj_tcv[i].th_time[th_time_ind_list[i]]),  color=color_list[i])
-        
+        axs[0,1].plot(list_obj_tcv[i].th_rho, th_te/1e3 ,markersize=4, fillstyle='none',
+                      label='#{}, T={:.3f}'.format(shot_list[i], list_obj_tcv[i].th_time[th_time_ind_list[i]]),  color=color_list[i], marker=marker_list[i])
+        axs[0,1].fill_between(list_obj_tcv[i].th_rho, (th_te-th_te_err)/1e3, (th_te+th_te_err)/1e3, color=color_list[i], alpha=0.2)    
     
-        axs[0,0].plot(list_obj_tcv[i].th_rho, th_ne/10**19,marker='+', 
-                      label='#{}, T={:.3f}'.format(shot_list[i], list_obj_tcv[i].th_time[th_time_ind_list[i]]), color=color_list[i])
-        
-      
+        axs[0,0].plot(list_obj_tcv[i].th_rho, th_ne/10**19,markersize=4, fillstyle='none',
+                      label='#{}, T={:.3f}'.format(shot_list[i], list_obj_tcv[i].th_time[th_time_ind_list[i]]), color=color_list[i], marker=marker_list[i])
+        axs[0,0].fill_between(list_obj_tcv[i].th_rho, (th_ne-th_ne_err)/10**19, (th_ne+th_ne_err)/10**19, color=color_list[i], alpha=0.2)
+
     axs[0,0].legend(fontsize="8")
     # axs[0,1].legend()
     # axs[1,1].legend()
@@ -1022,24 +1036,41 @@ def plot_profiles_comparison(shot_list, time_list, rhomin=None, rhomax=None, tav
             if tavg is not None:
                 tmin_ind = get_closest_ind(list_obj_tcv[i].cxrs_vtor_time, list_obj_tcv[i].cxrs_vtor_time[cxrs_vtor_time_ind_list[i]]-tavg/2)
                 tmax_ind = get_closest_ind(list_obj_tcv[i].cxrs_vtor_time, list_obj_tcv[i].cxrs_vtor_time[cxrs_vtor_time_ind_list[i]]+tavg/2)
-                # print(tmin_ind, tmax_ind)
+                # print(tmin_ind, tmax_ind)*
+                
                 cxrs_vtor = np.mean(list_obj_tcv[i].cxrs_vtor[tmin_ind:tmax_ind, :], axis=0)
                 
                 tmin_ind = get_closest_ind(list_obj_tcv[i].cxrs_time, list_obj_tcv[i].cxrs_time[cxrs_time_ind_list[i]]-tavg/2)
                 tmax_ind = get_closest_ind(list_obj_tcv[i].cxrs_time, list_obj_tcv[i].cxrs_time[cxrs_time_ind_list[i]]+tavg/2)
                
                 cxrs_ti = np.mean(list_obj_tcv[i].cxrs_ti[tmin_ind:tmax_ind, :], axis=0)
+                
+                if plot_err:
+                    cxrs_vtor_err = np.mean(list_obj_tcv[i].cxrs_vtor_err[tmin_ind:tmax_ind, :], axis=0)
+                    cxrs_ti_err = np.mean(list_obj_tcv[i].cxrs_ti_err[tmin_ind:tmax_ind, :], axis=0)
+                else:
+                    cxrs_vtor_err = np.zeros((np.shape(cxrs_vtor)))
+                    cxrs_ti_err = np.zeros((np.shape(cxrs_ti)))
+                
             else:
                 cxrs_vtor = list_obj_tcv[i].cxrs_vtor[cxrs_vtor_time_ind_list[i], :]
                 cxrs_ti = list_obj_tcv[i].cxrs_ti[cxrs_time_ind_list[i], :]
-        
+
+                if plot_err:
+                    cxrs_vtor_err = list_obj_tcv[i].cxrs_vtor_err[cxrs_vtor_time_ind_list[i], :]
+                    cxrs_ti_err = list_obj_tcv[i].cxrs_ti_err[cxrs_time_ind_list[i], :]
+                else:
+                    cxrs_vtor_err = np.zeros((np.shape(cxrs_vtor)))
+                    cxrs_ti_err = np.zeros((np.shape(cxrs_ti)))
          
-            axs[1,0].plot(list_obj_tcv[i].cxrs_rho, cxrs_vtor ,marker='+',
-                            label='#{}, T={:.3f}'.format(shot_list[i], list_obj_tcv[i].cxrs_vtor_time[cxrs_vtor_time_ind_list[i]]), color=color_list[i])
+            axs[1,0].plot(list_obj_tcv[i].cxrs_rho, cxrs_vtor , markersize=4, fillstyle='none',
+                            label='#{}, T={:.3f}'.format(shot_list[i], list_obj_tcv[i].cxrs_vtor_time[cxrs_vtor_time_ind_list[i]]), color=color_list[i], marker=marker_list[i])
+            axs[1,0].fill_between(list_obj_tcv[i].cxrs_rho, cxrs_vtor-cxrs_vtor_err, cxrs_vtor+cxrs_vtor_err, color=color_list[i], alpha=0.2)
             
-            axs[1,1].plot(list_obj_tcv[i].cxrs_rho, cxrs_ti/1e3,marker='+', 
-                        label='#{}, T={:.3f}'.format(shot_list[i], list_obj_tcv[i].cxrs_time[cxrs_time_ind_list[i]]), color=color_list[i])
-    
+            axs[1,1].plot(list_obj_tcv[i].cxrs_rho, cxrs_ti/1e3,markersize=4, fillstyle='none',
+                        label='#{}, T={:.3f}'.format(shot_list[i], list_obj_tcv[i].cxrs_time[cxrs_time_ind_list[i]]), color=color_list[i], marker=marker_list[i])
+            axs[1,1].fill_between(list_obj_tcv[i].cxrs_rho, (cxrs_ti-cxrs_ti_err)/1e3, (cxrs_ti+cxrs_ti_err)/1e3, color=color_list[i], alpha=0.2)
+            
       
         axs[0,0].legend(fontsize="8")
 

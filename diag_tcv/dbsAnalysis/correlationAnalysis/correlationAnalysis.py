@@ -285,7 +285,7 @@ class CorrelationAnalysis(TCVShot):
         self.get_raw_data_list(isweep, ifreq_list)
         self.get_normalized_data_list()
         self.get_coherence_list(method=method)
-        # self.get_raytracing_data()
+        self.get_raytracing_data()
         
  
 
