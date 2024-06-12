@@ -500,40 +500,62 @@ class TCVShot():
         try:
             self.get_mag_eq_object(time)
             self.btor = self.mag_eq['Btor']
+            self.mag_eq_rgrid = self.mag_eq['rgrid']
+            self.mag_eq_zgrid = self.mag_eq['zgrid']
             self.tag_btor = True
         except:
             print('No Btor data')
             self.tag_btor = False
             self.btor = None
 
-    def get_rho_s(self, time):
+    def get_rho_s_r_z(self, time_window, r, z, rho):
         '''
         sound larmor radius from thomson temperature and mag eq
+        time_window is a list: [tinit:tfin]
+        SHOULD BE POSSIBLE TO ESTIMATE RHO FROM R AND Z
         '''
         
         if self.tag_btor==False or self.tag_th_fit==False:
             try:
                 self.get_thomson_fit()
-                self.get_btor(time)
+                self.get_btor(np.mean(time_window))
             except:
                 print(" can't load larmor radius: check btor or Thomson data")
                 self.tag_rho_s = False
                 self.rho_s = None         
 
-        th_te_ind = get_closest_ind(self.th_time, time)
+        th_te_ind_init = get_closest_ind(self.th_time, time_window[0])
+        th_te_ind_fin = get_closest_ind(self.th_time, time_window[1])
         
-        cs = np.sqrt(e*self.th_te[:, th_te_ind]/(m_i))  #sound speed in m/s
+        th_te_prof_loc = np.mean(self.th_te[:, th_te_ind_init:th_te_ind_fin], axis=1)
+        
+        rho_te_loc = get_closest_ind(self.th_rho, rho)
+        
+        th_te_loc = th_te_prof_loc[rho_te_loc]
+        
+        cs = np.sqrt(e*th_te_loc/(m_i))  #sound speed in m/s
         print('ok sound speed')
         
-        _btor_loc = 1.44#np.mean(self.btor, axis=1) #Avg btor over z to have radial estimate
+        r_ind = get_closest_ind(self.mag_eq_rgrid, r)
+        z_ind = get_closest_ind(self.mag_eq_zgrid, z)
+        
+        _btor_loc = abs(self.btor[r_ind, z_ind])
+
+        # _btor_loc = np.mean(self.btor, axis=1) #Avg btor over z to have radial estimate
+        print('ok btor ; shape:', _btor_loc.shape)
+    
         
         omega_cs = (e*_btor_loc)/(m_i) #frequency in s**-1
         print('ok cycl freq')
         # return cs, omega_cs
-        self.rho_s = cs/omega_cs #sound larmor radius in m
-        print('ok rho_s')
-        self.tag_rho_s = True
-        print('ok tag')
+        # self.rho_s = cs/omega_cs #sound larmor radius in m
+        # print('ok rho_s')
+        # self.tag_rho_s = True
+        # print('ok tag')
+        
+        return cs/omega_cs
+        
+        
         
     def get_r_and_R(self, twindow=None):
         ''' 
@@ -840,7 +862,7 @@ class TCVShot():
 
             
     
-    def plot_heating(self, ax=None, color=None):
+    def plot_heating(self, ax=None, color=None, **kwargs):
         self.get_nbi()
         self.get_ecrh()
         
@@ -882,6 +904,8 @@ class TCVShot():
         if self.tag_ecrh and self.tag_nbi:
             ax.set_xlim(max(self.ecrh_time[0], self.nbi_time[0]), min(self.ecrh_time[-1], self.nbi_time[-1]))
         
+        return ax
+
     def plot_summary(self):
         
         

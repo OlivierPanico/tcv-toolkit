@@ -204,65 +204,7 @@ ax.plot(corr_from_scipy)
 
 
 
-# %% Full coherence analysis function 
-def normalize_complex_1d(a):
-    a_r = normalize_array_1d(a.real)
-    a_i = normalize_array_1d(a.imag)
-    return a_r + 1j*a_i
 
-# Step 0: normalization of the signals
-def normalize_signals(zref, zhop):
-    zref_norm = normalize_complex_1d(zref)
-    zhop_norm = normalize_complex_1d(zhop)
-    return zref_norm, zhop_norm
-
-# Step 1: compute psd and csd
-def compute_psd_csd(zref_norm, zhop_norm, dt):
-    fref, psd_ref = custom_csd(zref_norm, zref_norm, dt=dt, nperseg=1024, noverlap=512, window=None, remove_mean=True)
-    fhop, psd_hop = custom_csd(zhop_norm, zhop_norm,dt=dt, nperseg=1024, noverlap=512, window=None, remove_mean=True)
-    fcsd, csd = custom_csd(zref_norm, zhop_norm, dt=dt, nperseg=1024, noverlap=512, window=None, remove_mean=True)
-    return fref, psd_ref, fhop, psd_hop, fcsd, csd
-
-# Step 2: normalization of csd by psd to obtain spectral coherence
-def compute_spectral_coherence(psd_ref, psd_hop, csd):
-    spectral_coh = abs(csd)**2/(psd_ref*psd_hop)
-    return spectral_coh
-
-# Step 3: ifftshift + inverse Fourier transform to obtain the correlation function
-def compute_correlation_function(csd, dt):
-    csd_ifftshift = np.fft.ifftshift(csd)
-    corr_from_csd = np.fft.ifft(csd_ifftshift)/dt/2
-    return corr_from_csd
-
-# Step 4: fftshift on the correlation function to replace peak at the center
-def shift_correlation_function(corr_from_csd):
-    corr = np.fft.fftshift(corr_from_csd)
-    return corr
-
-# Full coherence analysis function
-def full_coherence_analysis(zref, zhop, dt, plot=False, verbose=False):
-    zref_norm, zhop_norm = normalize_signals(zref, zhop)
-    fref, psd_ref, fhop, psd_hop, fcsd, csd = compute_psd_csd(zref_norm, zhop_norm, dt)
-    spectral_coh = compute_spectral_coherence(psd_ref, psd_hop, csd)
-    corr_from_csd = compute_correlation_function(csd, dt)
-    corr = shift_correlation_function(corr_from_csd)
-    
-    if plot:
-        # Plotting the results
-        tcorr_spec = scipy.signal.correlation_lags(1024, 1024, mode='same')*dt
-        fig, ax = plot_1d([], [], grid=True)
-        ax.plot(tcorr_spec*1e6,(corr), color='darkorchid', label='correlation function')
-        ax.plot(tcorr_spec*1e6,np.sqrt(corr.real**2+corr.imag**2), color='indigo', label='amplitude')
-        ax.set_xlabel(r'delay $[\mu_s]$')
-        ax.set_ylabel('correlation')
-        plt.legend()
-        plt.title('Spectral correlation function')
-        # plt.xlim(-20, 20)
-    
-    if verbose:
-        print('Full coherence analysis done')
-    
-    return corr, spectral_coh
 # %%
 
 correlObject = CorrelationAnalysis(80257)
@@ -320,9 +262,70 @@ plt.plot(-correlObject.rho_list_ref[20:40]+correlObject.rho_list_hop[20:40], spe
 ax.legend()
 
 #%%
+# correlObject = CorrelationAnalysis(81084, numDemod=True)
+correlObject = CorrelationAnalysis(80949, numDemod=True)
+isweep_list=[5]
+ifreq_list=np.linspace(1,39,40)
+for i,sweeploc in enumerate(isweep_list):
+    correlObject.wrapper_coherence_analysis(sweeploc, ifreq_list, method='time')
+#%%
+
+corr_list_low_f, spectral_coh_list_low_f = [], []
+for i in range(20):
+    i=i
+    # print(i)
+    zref = correlObject.corrSigDic['z_list_ref'][i]
+    zhop = correlObject.corrSigDic['z_list_hop'][i]
+    t_reduced_ref = correlObject.corrSigDic['t_reduced_list_ref'][i]
+    t_reduced_hop = correlObject.corrSigDic['t_reduced_list_hop'][i]
+    dt=np.diff(t_reduced_ref)[0]
+    corr, spectral_coh = full_coherence_analysis(zref, zhop, dt, plot=False, verbose=False)
+    maxcorr = np.max(abs(corr))
+    maxspectralcoh = np.max(spectral_coh)
+    corr_list_low_f.append(maxcorr)
+    spectral_coh_list_low_f.append(maxspectralcoh)
+
+corr_list, spectral_coh_list = [], []
+for i in range(20):
+    i=i+20
+    # print(i)
+    zref = correlObject.corrSigDic['z_list_ref'][i]
+    zhop = correlObject.corrSigDic['z_list_hop'][i]
+    t_reduced_ref = correlObject.corrSigDic['t_reduced_list_ref'][i]
+    t_reduced_hop = correlObject.corrSigDic['t_reduced_list_hop'][i]
+    dt=np.diff(t_reduced_ref)[0]
+    corr, spectral_coh = full_coherence_analysis(zref, zhop, dt, plot=False, verbose=False)
+    maxcorr = np.max(abs(corr))
+    maxspectralcoh = np.max(spectral_coh)
+    corr_list.append(maxcorr)
+    spectral_coh_list.append(maxspectralcoh)
+    
+fig, ax = plot_1d([],[], grid=True)
+
+ax.plot(correlObject.rho_list_hop[:20], corr_list_low_f, marker='+', color='teal', label='Pearson')
+plt.plot(correlObject.rho_list_hop[:20], spectral_coh_list_low_f, marker='x', color='indigo', label='spectral')
+ax.legend()
+
+ax.axvline(np.mean(correlObject.rho_list_ref[:20]), color='darkslategrey')
+ax.text(np.mean(correlObject.rho_list_ref[:20]), -.05, 'ref', color='darkslategrey', transform=ax.get_xaxis_transform(),
+            ha='center', va='top')
+
+
+ax.plot(correlObject.rho_list_hop[20:40], corr_list, marker='+', color='teal', label='Pearson')
+plt.plot(correlObject.rho_list_hop[20:40], spectral_coh_list, marker='x', color='indigo', label='spectral')
+ax.legend()
+ax.axvline(np.mean(correlObject.rho_list_ref[20:40]), color='darkslategrey')
+ax.text(np.mean(correlObject.rho_list_ref[20:40]), -.05, 'ref', color='darkslategrey', transform=ax.get_xaxis_transform(),
+            ha='center', va='top')
+
+
+ax.set_yscale('log')
+# ax.set_ylim(0.1, 1.1)
+
+#%%
 correlObject = CorrelationAnalysis(81084, numDemod=True)
 isweep_list=[5]
-ifreq_list=np.linspace(20,39,20)
+ifreq_list=np.linspace(21,39,20)
 for i,sweeploc in enumerate(isweep_list):
     correlObject.wrapper_coherence_analysis(sweeploc, ifreq_list, method='time')
 
@@ -339,34 +342,9 @@ for i in range(20):
     corr_list.append(maxcorr)
     spectral_coh_list.append(maxspectralcoh)
     
-fig, ax = plot_1d([],[], grid=True)
-ax.plot(-correlObject.rho_list_ref[20:40]+correlObject.rho_list_hop[20:40], corr_list, marker='+', color='teal', label='Pearson')
-plt.plot(-correlObject.rho_list_ref[20:40]+correlObject.rho_list_hop[20:40], spectral_coh_list, marker='x', color='indigo', label='spectral')
-ax.legend()
-
-#%%
-correlObject = CorrelationAnalysis(81084, numDemod=True)
-isweep_list=[5]
-ifreq_list=np.linspace(1,19,19)
-for i,sweeploc in enumerate(isweep_list):
-    correlObject.wrapper_coherence_analysis(sweeploc, ifreq_list, method='time')
-
-corr_list, spectral_coh_list = [], []
-for i in range(19):
-    zref = correlObject.corrSigDic['z_list_ref'][i]
-    zhop = correlObject.corrSigDic['z_list_hop'][i]
-    t_reduced_ref = correlObject.corrSigDic['t_reduced_list_ref'][i]
-    t_reduced_hop = correlObject.corrSigDic['t_reduced_list_hop'][i]
-    dt=np.diff(t_reduced_ref)[0]
-    corr, spectral_coh = full_coherence_analysis(zref, zhop, dt, plot=True, verbose=False)
-    maxcorr = np.max(abs(corr))
-    maxspectralcoh = np.max(spectral_coh)
-    corr_list.append(maxcorr)
-    spectral_coh_list.append(maxspectralcoh)
-    
 #%%
 fig, ax = plot_1d([],[], grid=True)
-ax.plot(+correlObject.rho_list_hop[0:19], corr_list, marker='+', color='teal', label='Pearson')
+ax.plot(+correlObject.rho_list_hop[0:19], corr_list[0:19], marker='+', color='teal', label='Pearson')
 # plt.plot(-correlObject.rho_list_ref[0:19]+correlObject.rho_list_hop[0:19], spectral_coh_list, marker='x', color='indigo', label='spectral')
 # ax.legend()
 ax.axvline(np.mean(correlObject.rho_list_ref[0:19]), color='darkslategrey')
@@ -376,4 +354,5 @@ ax.text(np.mean(correlObject.rho_list_ref[0:19]), -.05, 'ref', color='darkslateg
 ax.set_xlabel(r'$\rho$')
 ax.set_ylabel('correlation')
 ax.set_title('#{} ; sweep {}'.format(81084, 5))
+ax.set_yscale('log')
 # %%
