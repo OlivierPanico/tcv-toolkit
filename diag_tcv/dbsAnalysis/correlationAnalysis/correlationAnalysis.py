@@ -250,7 +250,7 @@ class CorrelationAnalysis(TCVShot):
         if ret:
             return z_list_ref, z_list_hop, t_reduced_list_ref, t_reduced_list_hop
         
-    def get_correlation_isweep(self, isweep, ifreq_list=None, nperseg=1024, noverlap=512, window=None, remove_mean=True, plot=False):
+    def get_correlation_isweep(self, isweep, ifreq_list=None, nperseg=1024, noverlap=512, window=None, remove_mean=True,mode='full', plot=False):
         
         if self.verbose:
             print('Performing correlation for sweep {}'.format(isweep))
@@ -269,7 +269,7 @@ class CorrelationAnalysis(TCVShot):
             zref_loc = self.processedData['sweep'+str(isweep)]['z_list_ref'][ifreq]
             zhop_loc = self.processedData['sweep'+str(isweep)]['z_list_hop'][ifreq]
 
-            tcorr_loc, coh_loc, fcsd_spectral, spectral_coh_loc = full_coherence_analysis(zref_loc, zhop_loc, dt, nperseg=nperseg, noverlap=noverlap, window=window, remove_mean=remove_mean, plot=self.plot, verbose=self.verbose)
+            tcorr_loc, coh_loc, fcsd_spectral, spectral_coh_loc = full_coherence_analysis(zref_loc, zhop_loc, dt, nperseg=nperseg, noverlap=noverlap, window=window, remove_mean=remove_mean, mode=mode, plot=self.plot, verbose=self.verbose)
             maxcoh = np.max(abs(coh_loc))
             maxspectralcoh = np.max(spectral_coh_loc)
 
@@ -319,22 +319,25 @@ class CorrelationAnalysis(TCVShot):
         
     
             
-    def plot_coherence_delta(self, isweep_list, ax_low_f=None, ax_high_f=None,  plot_spectral=True, plot_pearson=True, ylog=False):
+    def plot_coherence_delta(self, isweep_list, ax_low_f=None, ax_high_f=None,  plot_spectral=True, plot_pearson=True,plot_rho=False, ylog=False, add_pt_zero=True, norm_rho_s=True, mode='full', retdata=False):
 
         if ax_low_f is None:
             fig, ax_low_f = plot_1d([],[], grid=True)
         if ax_high_f is None: 
             fig, ax_high_f = plot_1d([],[], grid=True)
         
-        
         sweep_tinit = self.params_ref.TDIFDOP + self.params_ref.t0seq
         period = self.params_ref.Period*1e-3
         print('shape period', np.shape(period))
-              
-              
+        rho_s_list_low_f = []
+        rho_s_list_high_f = []   
+        
+            
         for i, isweep in enumerate(isweep_list):
+            # self.get_correlation_isweep(isweep, mode=mode)  
             if 'maxcoh_list' not in self.processedData['sweep'+str(isweep)]:
-                self.get_correlation_isweep(isweep)
+                print('=== DEBUG === RELOAD CORRELATION')
+                self.get_correlation_isweep(isweep, mode=mode)
             if 'rho_list_ref' not in self.processedData['sweep'+str(isweep)]:
                 self.get_raytracing_isweep(isweep)
             
@@ -358,34 +361,80 @@ class CorrelationAnalysis(TCVShot):
                     delta[i] = np.sqrt((r_ref[i]-r_hop[i])**2 + (z_ref[i]-z_hop[i])**2)
             
             
-            sweep_tinit_loc = sweep_tinit[isweep-1]
-            period_loc = period
-            print(sweep_tinit_loc, sweep_tinit_loc+period_loc)
-            rho_s_loc_low_f = self.get_rho_s_r_z([sweep_tinit_loc, sweep_tinit_loc+period_loc], np.mean(r_ref[:20]), np.mean(z_ref[:20]), np.mean(self.processedData['sweep'+str(isweep)]['rho_list_ref'][:20]))
-            rho_s_loc_high_f = self.get_rho_s_r_z([sweep_tinit_loc, sweep_tinit_loc+period_loc], np.mean(r_ref[20:40]), np.mean(z_ref[20:40]), np.mean(self.processedData['sweep'+str(isweep)]['rho_list_ref'][20:40]))
+            if norm_rho_s:
+                sweep_tinit_loc = sweep_tinit[isweep-1]
+                period_loc = period
+                
+                rho_s_loc_low_f = self.get_rho_s_r_z([sweep_tinit_loc, sweep_tinit_loc+period_loc], np.mean(r_ref[:20]), np.mean(z_ref[:20]), np.mean(self.processedData['sweep'+str(isweep)]['rho_list_ref'][:20]))
+                rho_s_loc_high_f = self.get_rho_s_r_z([sweep_tinit_loc, sweep_tinit_loc+period_loc], np.mean(r_ref[20:40]), np.mean(z_ref[20:40]), np.mean(self.processedData['sweep'+str(isweep)]['rho_list_ref'][20:40]))
+                
+                #put the rho_s in cm
+                rho_s_loc_low_f = rho_s_loc_low_f*100
+                rho_s_loc_high_f = rho_s_loc_high_f*100
+                
+                rho_s_list_low_f.append(rho_s_loc_low_f)
+                rho_s_list_high_f.append(rho_s_loc_high_f)
+                
+                delta[:20] = delta[:20]/rho_s_loc_low_f
+                delta[20:40] = delta[20:40]/rho_s_loc_high_f
             
-            #put the rho_s in cm
-            rho_s_loc_low_f = rho_s_loc_low_f*100
-            rho_s_loc_high_f = rho_s_loc_high_f*100
             
-            print(rho_s_loc_low_f, rho_s_loc_high_f)
+            if add_pt_zero:
+                delta_low_f = np.concatenate(([0], delta[:20]))
+                delta_high_f = np.concatenate(([0], delta[20:40]))
             
+                val_low_f_spec = np.concatenate(([1], self.processedData['sweep'+str(isweep)]['maxspectralcoh_list'][:20]))
+                val_high_f_spec = np.concatenate(([1], self.processedData['sweep'+str(isweep)]['maxspectralcoh_list'][20:40]))
+                
+                val_low_f_pear = np.concatenate(([1], self.processedData['sweep'+str(isweep)]['maxcoh_list'][:20]))
+                val_high_f_pear = np.concatenate(([1], self.processedData['sweep'+str(isweep)]['maxcoh_list'][20:40]))
+            
+                #sorting the arrays along the delta components
+                inds_low_f = delta_low_f.argsort()
+                print('inds_low_f' , inds_low_f)
+                inds_high_f = delta_high_f.argsort()
+                delta_low_f = delta_low_f[inds_low_f]
+                delta_high_f = delta_high_f[inds_high_f]
+                val_low_f_spec = val_low_f_spec[inds_low_f]
+                val_high_f_spec = val_high_f_spec[inds_high_f]
+                val_low_f_pear = val_low_f_pear[inds_low_f]
+                val_high_f_pear = val_high_f_pear[inds_high_f]
+                
+                
+            
+            else:
+                delta_low_f = delta[:20]
+                delta_high_f = delta[20:40]
+            
+                val_low_f_spec = self.processedData['sweep'+str(isweep)]['maxspectralcoh_list'][:20]
+                val_high_f_spec = self.processedData['sweep'+str(isweep)]['maxspectralcoh_list'][20:40]
+                
+                val_low_f_pear = self.processedData['sweep'+str(isweep)]['maxcoh_list'][:20]
+                val_high_f_pear = self.processedData['sweep'+str(isweep)]['maxcoh_list'][20:40]
+                
             if plot_spectral:
-                ax_low_f.plot(delta[:20]/rho_s_loc_low_f,
-                                self.processedData['sweep'+str(isweep)]['maxspectralcoh_list'][:20],
-                                label=r'spec ; isweep {} ; $\rho$ = {:.2f}'.format(isweep, np.mean(self.processedData['sweep'+str(isweep)]['rho_list_ref'][:20])))
-                ax_high_f.plot(delta[20:40]/rho_s_loc_high_f,
-                                self.processedData['sweep'+str(isweep)]['maxspectralcoh_list'][20:40],
-                                label=r'spec ; isweep {} ; $\rho$ = {:.2f}'.format(isweep, np.mean(self.processedData['sweep'+str(isweep)]['rho_list_ref'][20:40])))
-            
+                ax_low_f.plot(delta_low_f,
+                              val_low_f_spec,
+                              label=r'spec ; isweep {} ; $\rho$ = {:.2f}'.format(isweep, np.mean(self.processedData['sweep'+str(isweep)]['rho_list_ref'][:20])),
+                              markersize=5,
+                              linewidth=1)
+                ax_high_f.plot(delta_high_f,
+                               val_high_f_spec,
+                               label=r'spec ; isweep {} ; $\rho$ = {:.2f}'.format(isweep, np.mean(self.processedData['sweep'+str(isweep)]['rho_list_ref'][20:40])),
+                                markersize=5,
+                                linewidth=1)
             if plot_pearson:
                 
-                ax_low_f.plot(delta[:20]/rho_s_loc_low_f,
-                                self.processedData['sweep'+str(isweep)]['maxcoh_list'][:20],
-                                label=r'pear ; isweep {} ; $\rho$ = {:.2f}'.format(isweep, np.mean(self.processedData['sweep'+str(isweep)]['rho_list_ref'][:20])))
-                ax_high_f.plot(delta[20:40]/rho_s_loc_high_f,
-                                self.processedData['sweep'+str(isweep)]['maxcoh_list'][20:40],
-                                label=r'pear ; isweep {} ; $\rho$ = {:.2f}'.format(isweep, np.mean(self.processedData['sweep'+str(isweep)]['rho_list_ref'][20:40])))
+                ax_low_f.plot(delta_low_f,
+                              val_low_f_pear,
+                                label=r'pear ; isweep {} ; $\rho$ = {:.2f}'.format(isweep, np.mean(self.processedData['sweep'+str(isweep)]['rho_list_ref'][:20])),
+                                 markersize=5,
+                              linewidth=1)
+                ax_high_f.plot(delta_high_f,
+                               val_high_f_pear,
+                               label=r'pear ; isweep {} ; $\rho$ = {:.2f}'.format(isweep, np.mean(self.processedData['sweep'+str(isweep)]['rho_list_ref'][20:40])),
+                                markersize=5,
+                              linewidth=1)
 
         
         ax_low_f.set_title(r'#{}'.format(self.shot))
@@ -394,22 +443,58 @@ class CorrelationAnalysis(TCVShot):
         my_legend(ax_low_f, fontsize="12")
         my_legend(ax_high_f, fontsize="12")
         
-
-        ax_low_f.set_xlabel(r'$\Delta/\rho_s$')
-        ax_high_f.set_xlabel(r'$\Delta/\rho_s$')
-
+        if norm_rho_s:
+            ax_low_f.set_xlabel(r'$\Delta/\rho_s$')
+            ax_high_f.set_xlabel(r'$\Delta/\rho_s$')
+        else:
+            ax_low_f.set_xlabel(r'$\Delta$ $[cm]$')
+            ax_high_f.set_xlabel(r'$\Delta$ $[cm]$')
+            
         ax_high_f.set_ylabel(r'correlation')
         ax_low_f.set_ylabel(r'correlation')
+        
+        
+        # ax_low_f.set_xlim(-8, 3)
+        # ax_high_f.set_xlim(-8, 3)
+
+        # ax_low_f.set_ylim(0.1, 1.1)
+        # ax_high_f.set_ylim(0.1, 1.1)
+        
+        
+        
         if ylog:
             ax_low_f.set_yscale('log')
             ax_high_f.set_yscale('log')
 
         
-        ax_low_f.set_xlim(-8, 3)
-        ax_high_f.set_xlim(-8, 3)
 
-        ax_low_f.set_ylim(0.1, 1)
-        ax_high_f.set_ylim(0.1, 1)
+        
+        if norm_rho_s and plot_rho:
+            plot_1d(np.array(rho_s_list_low_f)*10, label='low f', grid=True)
+            plt.plot(np.array(rho_s_list_high_f)*10, label='high f')
+            plt.ylabel(r'$\rho_s$ [mm]')
+            plt.xlabel('isweep')
+            plt.legend()
+        
+        if retdata:
+            data=dict()
+            data['delta_low_f'] = delta_low_f
+            data['val_low_f_spec'] = val_low_f_spec
+            data['val_high_f_spec'] = val_high_f_spec
+            data['val_low_f_pear'] = val_low_f_pear
+            data['val_high_f_pear'] = val_high_f_pear
+            data['rho_s_low_f'] = np.array(rho_s_list_low_f)
+            data['rho_low_f'] = np.mean(self.processedData['sweep'+str(isweep)]['rho_list_ref'][:20])
+            
+            data['delta_high_f'] = delta_high_f
+            data['val_low_f_spec'] = val_low_f_spec
+            data['val_high_f_spec'] = val_high_f_spec
+            data['val_low_f_pear'] = val_low_f_pear
+            data['val_high_f_pear'] = val_high_f_pear
+            data['rho_s_high_f'] = np.array(rho_s_list_high_f)
+            data['rho_high_f'] = np.mean(self.processedData['sweep'+str(isweep)]['rho_list_ref'][20:40])
+            
+            return  ax_low_f, ax_high_f, delta, data
         
         return ax_low_f, ax_high_f, delta
     
@@ -484,9 +569,12 @@ class CorrelationAnalysis(TCVShot):
     
     
     
-    def plot_heating_with_sweeps(self, list_isweep):
-    
-        ax = self.plot_heating()
+    def plot_heating_with_sweeps(self, list_isweep, **kwargs):
+        
+        if 'markevery' not in kwargs:
+            kwargs['markevery'] = 20
+        
+        ax = self.plot_heating(**kwargs)
         
         #Nb sweep and associated times
         sweep_tinit = self.params_ref.TDIFDOP + self.params_ref.t0seq

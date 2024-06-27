@@ -66,3 +66,131 @@ plt.axhline(0, color='black')
 ax.legend(loc='upper left')
 
 plt.tight_layout()
+
+
+
+#%% PLOT ONE CH
+import numpy as np
+import matplotlib.pyplot as plt
+from DBS.analysis import DBS_Profile
+from DBS.beamtracing import DBSbeam
+
+from dataAnalysis.utils.plot_utils import plot_1d, my_legend, my_text
+import diag_tcv.utils.myMplStyle
+
+machine, shot, isweep_list, xmode, channelvals = 'tcv', 81069, [4], 1, [3]
+
+for i in range(len(isweep_list)):
+    args = (machine, shot, isweep_list[i], xmode, channelvals)
+    prof = DBS_Profile(*args)
+
+fig ,ax = plot_1d([], [], grid=True)
+err = np.zeros((2, len(prof.v_perp.values[:20])))
+err[1] = prof.dv_perp_up.values[:20]
+err[0] = prof.dv_perp_low.values[:20]
+plt.errorbar(prof.t.values[:20], prof.v_perp.values[:20],yerr=err,linewidth=0.8,color='teal')
+my_text(ax, 0.2, 0.9, r'$\rho$ = {:.2f} $\pm$ {:.2f}'.format(np.mean(prof.rho_psi.values[:20]), np.std(prof.rho_psi.values[:20])))
+ax.set_xlabel('t [s]')
+ax.set_ylabel(r'$v_\perp$ [km/s]')
+ax.set_title('#{} ; isweep {} ; ch {}'.format(shot, isweep_list, channelvals))
+plt.tight_layout()
+
+
+fig ,ax = plot_1d([], [], grid=True)
+err = np.zeros((2, len(prof.v_perp.values[20:])))
+err[1] = prof.dv_perp_up.values[20:]
+err[0] = prof.dv_perp_low.values[20:]
+plt.errorbar(prof.t.values[20:], prof.v_perp.values[20:],yerr=err,linewidth=0.8,color='teal')
+my_text(ax, 0.2, 0.9, r'$\rho$ = {:.2f} $\pm$ {:.2f}'.format(np.mean(prof.rho_psi.values[20:]), np.std(prof.rho_psi.values[20:])))
+ax.set_xlabel('t [s]')
+ax.set_ylabel(r'$v_\perp$ [km/s]')
+ax.set_title('#{} ; isweep {} ; ch {}'.format(shot, isweep_list, channelvals))
+plt.tight_layout()
+
+#%% PLOT BOTH CH
+import numpy as np
+import matplotlib.pyplot as plt
+from DBS.analysis import DBS_Profile
+from DBS.beamtracing import DBSbeam
+
+from dataAnalysis.utils.plot_utils import plot_1d, my_legend, my_text
+import diag_tcv.utils.myMplStyle
+
+machine, shot, isweep_list, xmode, channelvals = 'tcv', 81069, [4], 1, [3,4]
+
+for i in range(len(isweep_list)):
+    args = (machine, shot, isweep_list[i], xmode, channelvals)
+    prof = DBS_Profile(*args)
+
+prof3 = prof[prof.channel == channelvals[0]]
+prof4 = prof[prof.channel == channelvals[1]]
+
+fig ,ax = plot_1d([], [], grid=True)
+err = np.zeros((2, len(prof.v_perp.values[:20])))
+err[1] = prof.dv_perp_up.values[:20]
+err[0] = prof.dv_perp_low.values[:20]
+
+plt.errorbar(prof3.t.values[:20], prof3.v_perp.values[:20],yerr=err,linewidth=0.8,color='teal')
+# my_text(ax, 0.2, 0.9, r'$\rho$ = {:.2f} $\pm$ {:.2f}'.format(np.mean(prof3.rho_psi.values[:20]), np.std(prof3.rho_psi.values[:20])))
+my_text(ax, 0.2, 0.9, r'$\rho$ = {:.2f} - {:.2f} '.format(prof3.rho_psi.values[0], prof3.rho_psi.values[19]))
+plt.errorbar(prof4.t.values[:20], prof4.v_perp.values[:20],yerr=err,linewidth=0.8,color='firebrick')
+# my_text(ax, 0.2, 0.6, r'$\rho$ = {:.2f} $\pm$ {:.2f}'.format(np.mean(prof4.rho_psi.values[:20]), np.std(prof4.rho_psi.values[:20])))
+my_text(ax, 0.2, 0.7, r'$\rho$ = {:.2f} - {:.2f} '.format(prof4.rho_psi.values[0], prof4.rho_psi.values[19]))
+ax.set_xlabel('t [s]')
+ax.set_ylabel(r'$v_\perp$ [km/s]')
+ax.set_title('#{} ; isweep {}'.format(shot, isweep_list))
+plt.tight_layout()
+
+
+
+fig ,ax = plot_1d([], [], grid=True)
+err3 = np.zeros((2, len(prof3.v_perp.values[20:])))
+err3[1] = prof3.dv_perp_up.values[20:]
+err3[0] = prof3.dv_perp_low.values[20:]
+
+err4 = np.zeros((2, len(prof4.v_perp.values[20:])))
+err4[1] = prof4.dv_perp_up.values[20:]
+err4[0] = prof4.dv_perp_low.values[20:]
+
+
+plt.errorbar(prof3.t.values[20:], prof3.v_perp.values[20:],yerr=err3,linewidth=0.8,color='teal')
+# my_text(ax, 0.2, 0.9, r'$\rho$ = {:.2f} $\pm$ {:.2f}'.format(np.mean(prof3.rho_psi.values[:20]), np.std(prof3.rho_psi.values[:20])))
+my_text(ax, 0.2, 0.9, r'$\rho$ = {:.2f} - {:.2f} '.format(prof3.rho_psi.values[20], prof3.rho_psi.values[39]))
+# prof4 = prof[prof.channel == channelvals[1]]
+plt.errorbar(prof4.t.values[20:], prof4.v_perp.values[20:],yerr=err4,linewidth=0.8,color='firebrick')
+# my_text(ax, 0.2, 0.6, r'$\rho$ = {:.2f} $\pm$ {:.2f}'.format(np.mean(prof4.rho_psi.values[:20]), np.std(prof4.rho_psi.values[:20])))
+my_text(ax, 0.2, 0.7, r'$\rho$ = {:.2f} - {:.2f} '.format(prof4.rho_psi.values[20], prof4.rho_psi.values[39]))
+ax.set_xlabel('t [s]')
+ax.set_ylabel(r'$v_\perp$ [km/s]')
+ax.set_title('#{} ; isweep {}'.format(shot, isweep_list))
+plt.tight_layout()
+# %% HOPPING PROFILE
+
+machine, shot, isweep_list, xmode, channelvals = 'tcv', 81069, [4], 1, [4]
+
+for i in range(len(isweep_list)):
+    args = (machine, shot, isweep_list[i], xmode, channelvals)
+    prof = DBS_Profile(*args)
+
+    prof.sort_values(by='rho_psi', ascending=True, inplace=True)
+
+fig ,ax = plot_1d([], [], grid=True)
+err = np.zeros((2, len(prof.v_perp.values[:20])))
+err[1] = prof.dv_perp_up.values[:20]
+err[0] = prof.dv_perp_low.values[:20]
+ax.errorbar(prof.rho_psi.values[:20], prof.v_perp.values[:20], err, linewidth=0.8,color='teal')
+ax.set_xlabel(r'$\rho_\psi$')
+ax.set_ylabel(r'$v_\perp$ [km/s]')
+ax.set_title('#{} ; isweep {}'.format(shot, isweep_list))
+fig.tight_layout()
+
+# fig ,ax = plot_1d([], [], grid=True)
+err = np.zeros((2, len(prof.v_perp.values[20:])))
+err[1] = prof.dv_perp_up.values[20:]
+err[0] = prof.dv_perp_low.values[20:]
+ax.errorbar(prof.rho_psi.values[20:], prof.v_perp.values[20:], err, linewidth=0.8,color='teal')
+ax.set_xlabel(r'$\rho_\psi$')
+ax.set_ylabel(r'$v_\perp$ [km/s]')
+ax.set_title('#{} ; isweep {}'.format(shot, isweep_list))
+fig.tight_layout()
+# %%

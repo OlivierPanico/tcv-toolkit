@@ -867,35 +867,35 @@ class TCVShot():
         self.get_ecrh()
         
         if ax is None:
-            fig, ax = plot_1d([], [], grid=True)
+            fig, ax = plot_1d([], [], grid=True, **kwargs)
             ax.set_title('#{}'.format(self.shot))
         
         if self.tag_nbi:
             if self.tag_nb1:
                 if color is None:
-                    ax.plot(self.nbi_time, self.nb1*1e3, color='red', label='NB1')
+                    ax.plot(self.nbi_time, self.nb1*1e3, color='red', label='NB1', **kwargs)
                     ax.plot(self.nb1_ref_time, self.nb1_ref*1e3, color='xkcd:dark red', label='NB1 ref')
                 else:
-                    ax.plot(self.nbi_time, self.nb1*1e3,linestyle='--', marker='o', linewidth=0.2, markersize=5, markevery=500, color=color, label='NB1')
+                    ax.plot(self.nbi_time, self.nb1*1e3,linestyle='--', marker='o', linewidth=0.2, markersize=5, markevery=500, color=color, label='NB1', **kwargs)
                 
         if self.tag_nb2:
             if color is None:
-                ax.plot(self.nbi_time, self.nb2*1e3, color='green', label='NB2')
+                ax.plot(self.nbi_time, self.nb2*1e3, color='green', label='NB2', **kwargs)
                 ax.plot(self.nb2_ref_time, self.nb2_ref*1e3, color='xkcd:dark green', label='NB2 ref')
             else:
-                ax.plot(self.nbi_time, self.nb2*1e3, linestyle='dotted', color=color, label='NB2')
+                ax.plot(self.nbi_time, self.nb2*1e3, linestyle='dotted', color=color, label='NB2', **kwargs)
         
         if self.tag_nb1 and self.tag_nb2:
             if color is None:
-                ax.plot(self.nbi_time, self.nb1*1e3 + self.nb2*1e3, color='blue', label='NBtot')
+                ax.plot(self.nbi_time, self.nb1*1e3 + self.nb2*1e3, color='blue', label='NBtot',**kwargs)
             else:
-                ax.plot(self.nbi_time, self.nb1*1e3 + self.nb2*1e3, linestyle='-.', color=color, label='NBtot')
+                ax.plot(self.nbi_time, self.nb1*1e3 + self.nb2*1e3, linestyle='-.', color=color, label='NBtot', **kwargs)
                 
         if self.tag_ecrh:
             if color is None:
-                ax.plot(self.ecrh_time, self.ecrh_tot, color='xkcd:dark yellow', label='ECRH tot')
+                ax.plot(self.ecrh_time, self.ecrh_tot, color='xkcd:dark yellow', label='ECRH tot', **kwargs)
             else:
-                ax.plot(self.ecrh_time, self.ecrh_tot, marker='s',linewidth=0.2, markersize=5, markevery=500, color=color, label='ECRH tot')
+                ax.plot(self.ecrh_time, self.ecrh_tot, marker='s',linewidth=0.2, markersize=5, markevery=500, color=color, label='ECRH tot', **kwargs)
                 
 
         ax.set_ylabel('Power [kW]')
