@@ -9,7 +9,8 @@ from DBS.beamtracing import DBSbeam
 
 #to do: shot 80322 (ECRH / MIX (actually should be only NBI) / NBI)
 
-machine, shot, isweep_list, xmode, channelvals = 'tcv', 80376, [17], 1, [1]
+# machine, shot, isweep_list, xmode, channelvals = 'tcv', 80376, [17], 1, [1]
+machine, shot, isweep_list, xmode, channelvals = 'tcv', 81069, [4], 1, [4]
 
 # if not done already: run beamtracing:
 for ch in channelvals:

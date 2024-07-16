@@ -61,10 +61,13 @@ class CorrelationAnalysis(TCVShot):
         
         self.machine = machine
         self.tmp_dir = defs.DATA_TMP_DIR / f'{self.machine}'
+
+        # self.gas = isHydrogen(self.shot) moved to dischargeObject
         
         self.modeCorrelation = isModeCorrelation(self.shot)
         self.numDemod = numDemod
-    
+
+        
         self.xmode = xmode    
         self.plot = plot
     
@@ -265,11 +268,14 @@ class CorrelationAnalysis(TCVShot):
         maxspectralcoh_list = np.zeros((len(self.processedData['sweep'+str(isweep)]['ifreq_list'])))
         
         dt=self.processedData['sweep'+str(isweep)]['dt']
+        
+        fig, axfullcoherence=plot_1d([], [], grid=True)
+        
         for i, ifreq in enumerate(self.processedData['sweep'+str(isweep)]['ifreq_list']):
             zref_loc = self.processedData['sweep'+str(isweep)]['z_list_ref'][ifreq]
             zhop_loc = self.processedData['sweep'+str(isweep)]['z_list_hop'][ifreq]
 
-            tcorr_loc, coh_loc, fcsd_spectral, spectral_coh_loc = full_coherence_analysis(zref_loc, zhop_loc, dt, nperseg=nperseg, noverlap=noverlap, window=window, remove_mean=remove_mean, mode=mode, plot=self.plot, verbose=self.verbose)
+            tcorr_loc, coh_loc, fcsd_spectral, spectral_coh_loc = full_coherence_analysis(zref_loc, zhop_loc, dt, nperseg=nperseg, noverlap=noverlap, window=window, remove_mean=remove_mean, mode=mode, plot=plot,ax=axfullcoherence, verbose=self.verbose)
             maxcoh = np.max(abs(coh_loc))
             maxspectralcoh = np.max(spectral_coh_loc)
 
@@ -285,14 +291,12 @@ class CorrelationAnalysis(TCVShot):
         
 
     def get_raytracing_isweep(self, isweep, ifreq_list=None):
-        
         ###real frequencies of hop and ref
         # freq_list_hop = self.processedData['sweep'+str(isweep)]['freq_list_hop']
         # freq_list_ref = self.processedData['sweep'+str(isweep)]['freq_list_ref']
-        
         ### index of frequencies to be used
-        ifreq_list = self.processedData['sweep'+str(isweep)]['ifreq_list']
-        
+        if ifreq_list is None:
+            ifreq_list = self.processedData['sweep'+str(isweep)]['ifreq_list']
         # t_reduced_list_ref = self.processedData['sweep'+str(isweep)]['t_reduced_list_ref']
         
         # freq_list_hop = self.corrSigDic['freq_list_hop']
@@ -328,15 +332,12 @@ class CorrelationAnalysis(TCVShot):
         
         sweep_tinit = self.params_ref.TDIFDOP + self.params_ref.t0seq
         period = self.params_ref.Period*1e-3
-        print('shape period', np.shape(period))
         rho_s_list_low_f = []
         rho_s_list_high_f = []   
         
-            
         for i, isweep in enumerate(isweep_list):
             # self.get_correlation_isweep(isweep, mode=mode)  
             if 'maxcoh_list' not in self.processedData['sweep'+str(isweep)]:
-                print('=== DEBUG === RELOAD CORRELATION')
                 self.get_correlation_isweep(isweep, mode=mode)
             if 'rho_list_ref' not in self.processedData['sweep'+str(isweep)]:
                 self.get_raytracing_isweep(isweep)

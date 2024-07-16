@@ -64,9 +64,31 @@ marker_list = ['+', 'x', 's', 'o', 'v', '^', '<', '>', 'p', 'P', '*', 'h', 'H', 
 ### PHYSICAL CONSTANTS ###
 k_b = 1.380649E-23   #Boltzmann Constant
 epsilon_0 = 8.854E-12 #Void permittivity
-m_i = 1.6726E-27    #Mass proton
+m_proton = 1.6726E-27    #Mass proton
 m_e = 9.1094E-31    #Mass electron
 e = 1.6022E-19        #Charge electron
+
+### ============== ###
+### Specifying gas ###
+### ============== ###
+def isHydrogen(shot):
+    hydrogen={}
+    hydrogen['80931'] = True
+    hydrogen['80939'] = True
+    hydrogen['80940'] = True
+    hydrogen['80942'] = True
+    hydrogen['80946'] = True
+    hydrogen['80947'] = True
+    hydrogen['80949'] = True
+    hydrogen['80951'] = True
+    
+    if str(shot) not in hydrogen:
+        print(' --- hydrogen not filled: putting False as default --- ')
+        return False
+    return hydrogen[str(shot)]
+
+
+
 
 ### ================= ###
 ### Utility functions ###
@@ -221,6 +243,12 @@ class TCVShot():
             print('Impossible to open shot {}'.format(shot))
             self.tag = False
             pass
+        
+        self.isH = isHydrogen(shot)
+        if self.isH==True:
+            self.m_i = m_proton
+        else:
+            self.m_i = 2*m_proton
         
         self.cmap = cmap
         
@@ -533,7 +561,7 @@ class TCVShot():
         
         th_te_loc = th_te_prof_loc[rho_te_loc]
         
-        cs = np.sqrt(e*th_te_loc/(m_i))  #sound speed in m/s
+        cs = np.sqrt(e*th_te_loc/(self.m_i))  #sound speed in m/s
         print('ok sound speed')
         
         r_ind = get_closest_ind(self.mag_eq_rgrid, r)
@@ -545,8 +573,8 @@ class TCVShot():
         print('ok btor ; shape:', _btor_loc.shape)
     
         
-        omega_cs = (e*_btor_loc)/(m_i) #frequency in s**-1
-        print('ok cycl freq')
+        omega_cs = (e*_btor_loc)/(self.m_i) #frequency in s**-1
+        print('ok cycl freq: ', omega_cs)
         # return cs, omega_cs
         # self.rho_s = cs/omega_cs #sound larmor radius in m
         # print('ok rho_s')
@@ -980,7 +1008,6 @@ def plot_profiles_comparison(shot_list, time_list, plot_err=None, rhomin=None, r
     
     list_obj_tcv = [TCVShot(shot) for shot in shot_list]
     
-   
     for i in range(len(list_obj_tcv)):
         list_obj_tcv[i].get_thomson_fit()
         list_obj_tcv[i].get_cxrs_fit(set_nan_to_zero=True)
@@ -991,9 +1018,11 @@ def plot_profiles_comparison(shot_list, time_list, plot_err=None, rhomin=None, r
     
     th_time_ind_list = [get_closest_ind(list_obj_tcv[i].th_time, time_list[i]) for i in range(len(list_obj_tcv))]
     
- 
+
     # color_list = ['blue', 'red', 'green', 'black', 'orange', 'purple', 'brown', 'pink', 'grey', 'cyan']
     # marker_list = 
+
+
     fig ,axs = prep_multiple_subplots(2,2, figsize=(8,5), axgrid=[0,1,2,3], sharex=True)
     fig.suptitle('#{} ; tavg = {}'.format(shot_list, tavg))
     
@@ -1002,38 +1031,55 @@ def plot_profiles_comparison(shot_list, time_list, plot_err=None, rhomin=None, r
     # fig, ax_ti = plot_1d([], [], grid=True, xlabel=r'$\rho$', ylabel=r'$T_i$ $[eV]$')
     for i in range(len(list_obj_tcv)):
         
+        # ---rho range------------------------------------- #
+        th_rho_all = list_obj_tcv[i].th_rho
+        if rhomin is not None:
+            rho_min_ind = get_closest_ind(th_rho_all, rhomin)
+        else:
+            rho_min_ind = None
+        if rhomax is not None:
+            rho_max_ind = get_closest_ind(th_rho_all, rhomax)+1
+        else:
+            rho_max_ind = None
+        th_rho = th_rho_all[rho_min_ind:rho_max_ind]
+        # ------------------------------------------------ #
+        
+        # ---time average--------------------------------- #
         if tavg is not None:
             tmin_ind = get_closest_ind(list_obj_tcv[i].th_time, list_obj_tcv[i].th_time[th_time_ind_list[i]]-tavg/2)
             tmax_ind = get_closest_ind(list_obj_tcv[i].th_time, list_obj_tcv[i].th_time[th_time_ind_list[i]]+tavg/2)
             # print(tmin_ind, tmax_ind)
-            th_te = np.mean(list_obj_tcv[i].th_te[:, tmin_ind:tmax_ind], axis=1)
-            th_ne = np.mean(list_obj_tcv[i].th_ne[:, tmin_ind:tmax_ind], axis=1)
+            th_te = np.mean(list_obj_tcv[i].th_te[rho_min_ind:rho_max_ind, tmin_ind:tmax_ind], axis=1)
+            th_ne = np.mean(list_obj_tcv[i].th_ne[rho_min_ind:rho_max_ind, tmin_ind:tmax_ind], axis=1)
             
             if plot_err:
-                th_te_err = np.mean(list_obj_tcv[i].th_te_err[:, tmin_ind:tmax_ind], axis=1)
-                th_ne_err = np.mean(list_obj_tcv[i].th_ne_err[:, tmin_ind:tmax_ind], axis=1)    
+                th_te_err = np.mean(list_obj_tcv[i].th_te_err[rho_min_ind:rho_max_ind, tmin_ind:tmax_ind], axis=1)
+                th_ne_err = np.mean(list_obj_tcv[i].th_ne_err[rho_min_ind:rho_max_ind, tmin_ind:tmax_ind], axis=1)    
             else:
                 th_te_err = np.zeros((np.shape(th_te)))
                 th_ne_err = np.zeros((np.shape(th_ne)))
+        # ------------------------------------------------ #
             
         else:
-            th_te = list_obj_tcv[i].th_te[:,th_time_ind_list[i]]
-            th_ne = list_obj_tcv[i].th_ne[:,th_time_ind_list[i]]
+            th_te = list_obj_tcv[i].th_te[rho_min_ind:rho_max_ind,th_time_ind_list[i]]
+            th_ne = list_obj_tcv[i].th_ne[rho_min_ind:rho_max_ind,th_time_ind_list[i]]
             if plot_err:
-                th_te_err = list_obj_tcv[i].th_te_err[:,th_time_ind_list[i]]
-                th_ne_err = list_obj_tcv[i].th_ne_err[:,th_time_ind_list[i]]
+                th_te_err = list_obj_tcv[i].th_te_err[rho_min_ind:rho_max_ind,th_time_ind_list[i]]
+                th_ne_err = list_obj_tcv[i].th_ne_err[rho_min_ind:rho_max_ind,th_time_ind_list[i]]
             else:
                 th_te_err = np.zeros((np.shape(th_te)))
                 th_ne_err = np.zeros((np.shape(th_ne)))
-                                
+        
+        # ---plotting thomson data------------------------ #                   
         # list_obj_tcv[i].plot_heating(ax=axs[0,0], color=color_list[i])
-        axs[0,1].plot(list_obj_tcv[i].th_rho, th_te/1e3 ,markersize=4, fillstyle='none',
-                      label='#{}, T={:.3f}'.format(shot_list[i], list_obj_tcv[i].th_time[th_time_ind_list[i]]),  color=color_list[i], marker=marker_list[i])
-        axs[0,1].fill_between(list_obj_tcv[i].th_rho, (th_te-th_te_err)/1e3, (th_te+th_te_err)/1e3, color=color_list[i], alpha=0.2)    
+        axs[0,1].plot(th_rho, th_te/1e3 ,linewidth=2, markersize=4, fillstyle='none',
+                      label='#{}, T={:.3f}'.format(shot_list[i], list_obj_tcv[i].th_time[th_time_ind_list[i]]),  color=color_list[i], marker='')
+        axs[0,1].fill_between(th_rho, (th_te-th_te_err)/1e3, (th_te+th_te_err)/1e3, color=color_list[i], alpha=0.2)    
     
-        axs[0,0].plot(list_obj_tcv[i].th_rho, th_ne/10**19,markersize=4, fillstyle='none',
-                      label='#{}, T={:.3f}'.format(shot_list[i], list_obj_tcv[i].th_time[th_time_ind_list[i]]), color=color_list[i], marker=marker_list[i])
-        axs[0,0].fill_between(list_obj_tcv[i].th_rho, (th_ne-th_ne_err)/10**19, (th_ne+th_ne_err)/10**19, color=color_list[i], alpha=0.2)
+        axs[0,0].plot(th_rho, th_ne/10**19,linewidth=2, markersize=4, fillstyle='none',
+                      label='#{}, T={:.3f}'.format(shot_list[i], list_obj_tcv[i].th_time[th_time_ind_list[i]]), color=color_list[i], marker='')
+        axs[0,0].fill_between(th_rho, (th_ne-th_ne_err)/10**19, (th_ne+th_ne_err)/10**19, color=color_list[i], alpha=0.2)
+        # ------------------------------------------------ #
 
     axs[0,0].legend(fontsize="8")
     # axs[0,1].legend()
@@ -1057,43 +1103,55 @@ def plot_profiles_comparison(shot_list, time_list, plot_err=None, rhomin=None, r
         
         for i in range(len(list_obj_tcv)):
             
+            cxrs_rho_all = list_obj_tcv[i].cxrs_rho
+            if rhomin is not None:
+                rho_min_ind = get_closest_ind(cxrs_rho_all, rhomin)
+            else:
+                rho_min_ind = None
+            if rhomax is not None:
+                rho_max_ind = get_closest_ind(cxrs_rho_all, rhomax)+1
+            else:
+                rho_max_ind = None
+            
+            cxrs_rho = cxrs_rho_all[rho_min_ind:rho_max_ind]
+            
             if tavg is not None:
                 tmin_ind = get_closest_ind(list_obj_tcv[i].cxrs_vtor_time, list_obj_tcv[i].cxrs_vtor_time[cxrs_vtor_time_ind_list[i]]-tavg/2)
                 tmax_ind = get_closest_ind(list_obj_tcv[i].cxrs_vtor_time, list_obj_tcv[i].cxrs_vtor_time[cxrs_vtor_time_ind_list[i]]+tavg/2)
                 # print(tmin_ind, tmax_ind)*
                 
-                cxrs_vtor = np.mean(list_obj_tcv[i].cxrs_vtor[tmin_ind:tmax_ind, :], axis=0)
+                cxrs_vtor = np.mean(list_obj_tcv[i].cxrs_vtor[tmin_ind:tmax_ind, rho_min_ind:rho_max_ind], axis=0)
                 
                 tmin_ind = get_closest_ind(list_obj_tcv[i].cxrs_time, list_obj_tcv[i].cxrs_time[cxrs_time_ind_list[i]]-tavg/2)
                 tmax_ind = get_closest_ind(list_obj_tcv[i].cxrs_time, list_obj_tcv[i].cxrs_time[cxrs_time_ind_list[i]]+tavg/2)
                
-                cxrs_ti = np.mean(list_obj_tcv[i].cxrs_ti[tmin_ind:tmax_ind, :], axis=0)
+                cxrs_ti = np.mean(list_obj_tcv[i].cxrs_ti[tmin_ind:tmax_ind, rho_min_ind:rho_max_ind], axis=0)
                 
                 if plot_err:
-                    cxrs_vtor_err = np.mean(list_obj_tcv[i].cxrs_vtor_err[tmin_ind:tmax_ind, :], axis=0)
-                    cxrs_ti_err = np.mean(list_obj_tcv[i].cxrs_ti_err[tmin_ind:tmax_ind, :], axis=0)
+                    cxrs_vtor_err = np.mean(list_obj_tcv[i].cxrs_vtor_err[tmin_ind:tmax_ind, rho_min_ind:rho_max_ind], axis=0)
+                    cxrs_ti_err = np.mean(list_obj_tcv[i].cxrs_ti_err[tmin_ind:tmax_ind, rho_min_ind:rho_max_ind], axis=0)
                 else:
                     cxrs_vtor_err = np.zeros((np.shape(cxrs_vtor)))
                     cxrs_ti_err = np.zeros((np.shape(cxrs_ti)))
                 
             else:
-                cxrs_vtor = list_obj_tcv[i].cxrs_vtor[cxrs_vtor_time_ind_list[i], :]
-                cxrs_ti = list_obj_tcv[i].cxrs_ti[cxrs_time_ind_list[i], :]
+                cxrs_vtor = list_obj_tcv[i].cxrs_vtor[cxrs_vtor_time_ind_list[i], rho_min_ind:rho_max_ind]
+                cxrs_ti = list_obj_tcv[i].cxrs_ti[cxrs_time_ind_list[i], rho_min_ind:rho_max_ind]
 
                 if plot_err:
-                    cxrs_vtor_err = list_obj_tcv[i].cxrs_vtor_err[cxrs_vtor_time_ind_list[i], :]
-                    cxrs_ti_err = list_obj_tcv[i].cxrs_ti_err[cxrs_time_ind_list[i], :]
+                    cxrs_vtor_err = list_obj_tcv[i].cxrs_vtor_err[cxrs_vtor_time_ind_list[i], rho_min_ind:rho_max_ind]
+                    cxrs_ti_err = list_obj_tcv[i].cxrs_ti_err[cxrs_time_ind_list[i], rho_min_ind:rho_max_ind]
                 else:
                     cxrs_vtor_err = np.zeros((np.shape(cxrs_vtor)))
                     cxrs_ti_err = np.zeros((np.shape(cxrs_ti)))
          
-            axs[1,0].plot(list_obj_tcv[i].cxrs_rho, cxrs_vtor , markersize=4, fillstyle='none',
-                            label='#{}, T={:.3f}'.format(shot_list[i], list_obj_tcv[i].cxrs_vtor_time[cxrs_vtor_time_ind_list[i]]), color=color_list[i], marker=marker_list[i])
-            axs[1,0].fill_between(list_obj_tcv[i].cxrs_rho, cxrs_vtor-cxrs_vtor_err, cxrs_vtor+cxrs_vtor_err, color=color_list[i], alpha=0.2)
+            axs[1,0].plot(cxrs_rho, cxrs_vtor , markersize=4, fillstyle='none',
+                            label='#{}, T={:.3f}'.format(shot_list[i], list_obj_tcv[i].cxrs_vtor_time[cxrs_vtor_time_ind_list[i]]), color=color_list[i], marker='')
+            axs[1,0].fill_between(cxrs_rho, cxrs_vtor-cxrs_vtor_err, cxrs_vtor+cxrs_vtor_err, color=color_list[i], alpha=0.2)
             
-            axs[1,1].plot(list_obj_tcv[i].cxrs_rho, cxrs_ti/1e3,markersize=4, fillstyle='none',
-                        label='#{}, T={:.3f}'.format(shot_list[i], list_obj_tcv[i].cxrs_time[cxrs_time_ind_list[i]]), color=color_list[i], marker=marker_list[i])
-            axs[1,1].fill_between(list_obj_tcv[i].cxrs_rho, (cxrs_ti-cxrs_ti_err)/1e3, (cxrs_ti+cxrs_ti_err)/1e3, color=color_list[i], alpha=0.2)
+            axs[1,1].plot(cxrs_rho, cxrs_ti/1e3,markersize=4, fillstyle='none',
+                        label='#{}, T={:.3f}'.format(shot_list[i], list_obj_tcv[i].cxrs_time[cxrs_time_ind_list[i]]), color=color_list[i], marker='')
+            axs[1,1].fill_between(cxrs_rho, (cxrs_ti-cxrs_ti_err)/1e3, (cxrs_ti+cxrs_ti_err)/1e3, color=color_list[i], alpha=0.2)
             
       
         axs[0,0].legend(fontsize="8")
@@ -1101,6 +1159,7 @@ def plot_profiles_comparison(shot_list, time_list, plot_err=None, rhomin=None, r
     except:
         print('No CXRS data')
     
+
     
     
     #     ax_te.plot(list_obj_tcv[i].th_rho, list_obj_tcv[i].th_te[:,th_time_ind_list[i]],marker='+', label='#{}, T={:.3f}'.format(shot_list[i], list_obj_tcv[i].th_time[th_time_ind_list[i]]))
@@ -1109,6 +1168,176 @@ def plot_profiles_comparison(shot_list, time_list, plot_err=None, rhomin=None, r
     # ax_te.legend()
     # ax_ne.legend()
     # ax_ti.legend()
+    return axs
+
+
+
+
+def plot_profiles_comparison_single_column(shot_list, time_list, plot_err=None, rhomin=None, rhomax=None, tavg=None):
+    
+    list_obj_tcv = [TCVShot(shot) for shot in shot_list]
+    
+    for i in range(len(list_obj_tcv)):
+        list_obj_tcv[i].get_thomson_fit()
+        list_obj_tcv[i].get_cxrs_fit(set_nan_to_zero=True)
+        
+    if len(shot_list) != len(time_list):
+        print('\n --- choosing same time for all shots --- ')
+        th_time_ind_list = [get_closest_ind(list_obj_tcv[i].th_time, time_list[0]) for i in range(len(list_obj_tcv))]
+    
+    th_time_ind_list = [get_closest_ind(list_obj_tcv[i].th_time, time_list[i]) for i in range(len(list_obj_tcv))]
+    
+
+    # color_list = ['blue', 'red', 'green', 'black', 'orange', 'purple', 'brown', 'pink', 'grey', 'cyan']
+    # marker_list = 
+
+
+    fig ,axs = prep_multiple_subplots(4,1, axgrid=[0,1,2,3], sharex=True)
+    fig.suptitle('#{} ; tavg = {}'.format(shot_list, tavg))
+    
+    # fig, ax_te = plot_1d([], [], grid=True, xlabel=r'$\rho$', ylabel=r'$T_e$ $[eV]$')
+    # fig, ax_ne = plot_1d([], [], grid=True, xlabel=r'$\rho$', ylabel=r'$n_e$ $[10^{19} m^{-3}]$')
+    # fig, ax_ti = plot_1d([], [], grid=True, xlabel=r'$\rho$', ylabel=r'$T_i$ $[eV]$')
+    for i in range(len(list_obj_tcv)):
+        
+        # ---rho range------------------------------------- #
+        th_rho_all = list_obj_tcv[i].th_rho
+        if rhomin is not None:
+            rho_min_ind = get_closest_ind(th_rho_all, rhomin)
+        else:
+            rho_min_ind = None
+        if rhomax is not None:
+            rho_max_ind = get_closest_ind(th_rho_all, rhomax)+1
+        else:
+            rho_max_ind = None
+        th_rho = th_rho_all[rho_min_ind:rho_max_ind]
+        # ------------------------------------------------ #
+        
+        # ---time average--------------------------------- #
+        if tavg is not None:
+            tmin_ind = get_closest_ind(list_obj_tcv[i].th_time, list_obj_tcv[i].th_time[th_time_ind_list[i]]-tavg/2)
+            tmax_ind = get_closest_ind(list_obj_tcv[i].th_time, list_obj_tcv[i].th_time[th_time_ind_list[i]]+tavg/2)
+            # print(tmin_ind, tmax_ind)
+            th_te = np.mean(list_obj_tcv[i].th_te[rho_min_ind:rho_max_ind, tmin_ind:tmax_ind], axis=1)
+            th_ne = np.mean(list_obj_tcv[i].th_ne[rho_min_ind:rho_max_ind, tmin_ind:tmax_ind], axis=1)
+            
+            if plot_err:
+                th_te_err = np.mean(list_obj_tcv[i].th_te_err[rho_min_ind:rho_max_ind, tmin_ind:tmax_ind], axis=1)
+                th_ne_err = np.mean(list_obj_tcv[i].th_ne_err[rho_min_ind:rho_max_ind, tmin_ind:tmax_ind], axis=1)    
+            else:
+                th_te_err = np.zeros((np.shape(th_te)))
+                th_ne_err = np.zeros((np.shape(th_ne)))
+        # ------------------------------------------------ #
+            
+        else:
+            th_te = list_obj_tcv[i].th_te[rho_min_ind:rho_max_ind,th_time_ind_list[i]]
+            th_ne = list_obj_tcv[i].th_ne[rho_min_ind:rho_max_ind,th_time_ind_list[i]]
+            if plot_err:
+                th_te_err = list_obj_tcv[i].th_te_err[rho_min_ind:rho_max_ind,th_time_ind_list[i]]
+                th_ne_err = list_obj_tcv[i].th_ne_err[rho_min_ind:rho_max_ind,th_time_ind_list[i]]
+            else:
+                th_te_err = np.zeros((np.shape(th_te)))
+                th_ne_err = np.zeros((np.shape(th_ne)))
+        
+        # ---plotting thomson data------------------------ #                   
+        # list_obj_tcv[i].plot_heating(ax=axs[0,0], color=color_list[i])
+        axs[1].plot(th_rho, th_te/1e3 ,linewidth=2, markersize=4, fillstyle='none',
+                      label='#{}, T={:.3f}'.format(shot_list[i], list_obj_tcv[i].th_time[th_time_ind_list[i]]),  color=color_list[i], marker='')
+        axs[1].fill_between(th_rho, (th_te-th_te_err)/1e3, (th_te+th_te_err)/1e3, color=color_list[i], alpha=0.2)    
+    
+        axs[0].plot(th_rho, th_ne/10**19,linewidth=2, markersize=4, fillstyle='none',
+                      label='#{}, T={:.3f}'.format(shot_list[i], list_obj_tcv[i].th_time[th_time_ind_list[i]]), color=color_list[i], marker='')
+        axs[0].fill_between(th_rho, (th_ne-th_ne_err)/10**19, (th_ne+th_ne_err)/10**19, color=color_list[i], alpha=0.2)
+        # ------------------------------------------------ #
+
+    axs[0].legend(fontsize="8")
+    # axs[0,1].legend()
+    # axs[1,1].legend()
+    axs[1].set_ylabel(r'$T_e$ $[keV]$')
+    axs[0].set_ylabel(r'$n_e$ $[10^{19} m^{-3}]$')
+    axs[3].set_ylabel(r'$v_{tor}$ $[km/s]$')
+    axs[2].set_ylabel(r'$T_i$ $[keV]$')
+    axs[3].set_xlabel(r'$\rho$')
+      
+    
+    #Data CXRS 
+    try:
+        if len(shot_list) != len(time_list):
+            print('\n --- choosing same time for all shots --- ')
+            cxrs_time_ind_list = [get_closest_ind(list_obj_tcv[i].cxrs_time, time_list[0]) for i in range(len(list_obj_tcv))]
+             
+        cxrs_time_ind_list = [get_closest_ind(list_obj_tcv[i].cxrs_time, time_list[i]) for i in range(len(list_obj_tcv))]
+        cxrs_vtor_time_ind_list = [get_closest_ind(list_obj_tcv[i].cxrs_vtor_time, time_list[i]) for i in range(len(list_obj_tcv))]
+        
+        for i in range(len(list_obj_tcv)):
+            
+            cxrs_rho_all = list_obj_tcv[i].cxrs_rho
+            if rhomin is not None:
+                rho_min_ind = get_closest_ind(cxrs_rho_all, rhomin)
+            else:
+                rho_min_ind = None
+            if rhomax is not None:
+                rho_max_ind = get_closest_ind(cxrs_rho_all, rhomax)+1
+            else:
+                rho_max_ind = None
+            
+            cxrs_rho = cxrs_rho_all[rho_min_ind:rho_max_ind]
+            
+            if tavg is not None:
+                tmin_ind = get_closest_ind(list_obj_tcv[i].cxrs_vtor_time, list_obj_tcv[i].cxrs_vtor_time[cxrs_vtor_time_ind_list[i]]-tavg/2)
+                tmax_ind = get_closest_ind(list_obj_tcv[i].cxrs_vtor_time, list_obj_tcv[i].cxrs_vtor_time[cxrs_vtor_time_ind_list[i]]+tavg/2)
+                # print(tmin_ind, tmax_ind)*
+                
+                cxrs_vtor = np.mean(list_obj_tcv[i].cxrs_vtor[tmin_ind:tmax_ind, rho_min_ind:rho_max_ind], axis=0)
+                
+                tmin_ind = get_closest_ind(list_obj_tcv[i].cxrs_time, list_obj_tcv[i].cxrs_time[cxrs_time_ind_list[i]]-tavg/2)
+                tmax_ind = get_closest_ind(list_obj_tcv[i].cxrs_time, list_obj_tcv[i].cxrs_time[cxrs_time_ind_list[i]]+tavg/2)
+               
+                cxrs_ti = np.mean(list_obj_tcv[i].cxrs_ti[tmin_ind:tmax_ind, rho_min_ind:rho_max_ind], axis=0)
+                
+                if plot_err:
+                    cxrs_vtor_err = np.mean(list_obj_tcv[i].cxrs_vtor_err[tmin_ind:tmax_ind, rho_min_ind:rho_max_ind], axis=0)
+                    cxrs_ti_err = np.mean(list_obj_tcv[i].cxrs_ti_err[tmin_ind:tmax_ind, rho_min_ind:rho_max_ind], axis=0)
+                else:
+                    cxrs_vtor_err = np.zeros((np.shape(cxrs_vtor)))
+                    cxrs_ti_err = np.zeros((np.shape(cxrs_ti)))
+                
+            else:
+                cxrs_vtor = list_obj_tcv[i].cxrs_vtor[cxrs_vtor_time_ind_list[i], rho_min_ind:rho_max_ind]
+                cxrs_ti = list_obj_tcv[i].cxrs_ti[cxrs_time_ind_list[i], rho_min_ind:rho_max_ind]
+
+                if plot_err:
+                    cxrs_vtor_err = list_obj_tcv[i].cxrs_vtor_err[cxrs_vtor_time_ind_list[i], rho_min_ind:rho_max_ind]
+                    cxrs_ti_err = list_obj_tcv[i].cxrs_ti_err[cxrs_time_ind_list[i], rho_min_ind:rho_max_ind]
+                else:
+                    cxrs_vtor_err = np.zeros((np.shape(cxrs_vtor)))
+                    cxrs_ti_err = np.zeros((np.shape(cxrs_ti)))
+         
+            axs[3].plot(cxrs_rho, cxrs_vtor , markersize=4, fillstyle='none',
+                            label='#{}, T={:.3f}'.format(shot_list[i], list_obj_tcv[i].cxrs_vtor_time[cxrs_vtor_time_ind_list[i]]), color=color_list[i], marker='')
+            axs[3].fill_between(cxrs_rho, cxrs_vtor-cxrs_vtor_err, cxrs_vtor+cxrs_vtor_err, color=color_list[i], alpha=0.2)
+            
+            axs[2].plot(cxrs_rho, cxrs_ti/1e3,markersize=4, fillstyle='none',
+                        label='#{}, T={:.3f}'.format(shot_list[i], list_obj_tcv[i].cxrs_time[cxrs_time_ind_list[i]]), color=color_list[i], marker='')
+            axs[2].fill_between(cxrs_rho, (cxrs_ti-cxrs_ti_err)/1e3, (cxrs_ti+cxrs_ti_err)/1e3, color=color_list[i], alpha=0.2)
+            
+      
+        axs[0].legend(fontsize="8")
+
+    except:
+        print('No CXRS data')
+    
+
+    
+    
+    #     ax_te.plot(list_obj_tcv[i].th_rho, list_obj_tcv[i].th_te[:,th_time_ind_list[i]],marker='+', label='#{}, T={:.3f}'.format(shot_list[i], list_obj_tcv[i].th_time[th_time_ind_list[i]]))
+    #     ax_ne.plot(list_obj_tcv[i].th_rho, list_obj_tcv[i].th_ne[:,th_time_ind_list[i]]/10**19,marker='+', label='#{}, T={:.3f}'.format(shot_list[i], list_obj_tcv[i].th_time[th_time_ind_list[i]]))
+    #     ax_ti.plot(list_obj_tcv[i].cxrs_rho, list_obj_tcv[i].cxrs_ti[cxrs_time_ind_list[i],:],marker='+', label='#{}, T={:.3f}'.format(shot_list[i], list_obj_tcv[i].cxrs_time[cxrs_time_ind_list[i]]))
+    # ax_te.legend()
+    # ax_ne.legend()
+    # ax_ti.legend()
+    return axs
+
 
 
 

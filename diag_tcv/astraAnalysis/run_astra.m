@@ -84,6 +84,8 @@ title(sprintf('rho=%d',mean(rho(43,:))));
 grid;
 
 
+
+
 %Comparison fluxes D/H for matching profiles
 shot = 80257;
 time_window=[1.55:0.01:1.65];
@@ -192,12 +194,7 @@ time2plot = [];
 
 shot = 80957
 time_window=[0.6:0.01:2]
-[dataH] = astra_tcv_automatic(shot, time_window);
-time2plot = [];
-%figure2plot = 7000;
-%what2plot = {'power_time', 'power_profile',  'NB_time'};
-ASTRA_TCV_summary(dataH,time2plot,figure2plot,what2plot);
-TD = dataD.out.T;
+[dataH] = astra_tcv_automatic(shot, time_window);TD = dataD.out.T;
 rhoD = dataD.out.RHOPSI;
 DQIEFF = dataD.out.QIEFF;
 DQEEFF = dataD.out.QEEFF;
@@ -218,3 +215,8 @@ legend('deuterium', 'hydrogen');
 ylabel('QIEFF/(QIEFF+QEEFF)');
 title(sprintf('rho=%d',mean(rho(43,:)))); 
 grid;
+
+time2plot = [];
+%figure2plot = 7000;
+%what2plot = {'power_time', 'power_profile',  'NB_time'};
+%ASTRA_TCV_summary(dataH,time2plot,figure2plot,what2plot);
