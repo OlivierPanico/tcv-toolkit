@@ -121,9 +121,9 @@ def wrapper_beam_vel_prof(shot_list, isweep_list, time_list, rhomin, rhomax, tav
     ifreq_list = np.linspace(1,20,20, dtype=int)
     plot_k_perp = False
     
-    cprof_list = ['blue', 'red']
-    cref_list = ['cyan', 'orange']
-    chop_list = ['blue', 'red']
+    cprof_list = ['blue', 'red', 'green', 'purple']
+    cref_list = ['cyan', 'orange', 'lime', 'magenta']
+    chop_list = ['blue', 'red', 'green', 'purple']
     
     fig, axs = prep_multiple_subplots(2,1,axgrid=[0,1])
     for i, shot in enumerate(shot_list):
@@ -278,16 +278,89 @@ wrapper_beam_vel_prof(shot_list=[80940, 81084], isweep_list=[4, 5], time_list=[0
 
 
 # %% 80949 (end) vs 81084 (end)
-wrapper_beam_vel_prof(shot_list=[80949, 81084], isweep_list=[8, 8], time_list=[1.5, 1.5],
+wrapper_beam_vel_prof(shot_list=[80949, 81084], isweep_list=[8, 9], time_list=[1.5, 1.7],
                     rhomin=0.75, rhomax=1.05, tavg=0.2, xmode=1, channelvals=[4])
 
 
-#%% TESTS
 
-wrapper_beam_vel_prof(shot_list=[81069, 81069], isweep_list=[8, 9], time_list=[1.5, 1.7],
+
+
+
+
+
+# %% 
+wrapper_beam_vel_prof(shot_list=[81087], isweep_list=[4], time_list=[0.7],
+                    rhomin=0.75, rhomax=1.05, tavg=0.2, xmode=1, channelvals=[4])
+
+
+
+#%% Week CW29
+###############################################################
+########################## WEEK CW29 ##########################
+###############################################################
+#%%
+shot=82549
+isweep = 3
+ifreq_list='all'
+
+plot_beam_on_prof(shot, isweep, ifreq_list, ax=None, cprof='black', cref='blue', chop='red', plot_k_perp=False)
+   
+wrapper_beam_vel_prof(shot_list=[shot], isweep_list=[isweep], time_list=[0.7],
+                    rhomin=0.75, rhomax=1.05, tavg=0.2, xmode=1, channelvals=[4])
+
+#%%
+shot_list=[82549, 81087]
+isweep_list = [3, 4]
+time_list = [0.7, 0.7]
+ifreq_list='all'
+
+wrapper_beam_vel_prof(shot_list, isweep_list, time_list,
+                    rhomin=0.75, rhomax=1.05, tavg=0.2, xmode=1, channelvals=[4])
+#%%
+shot_list=[82549, 82549]
+isweep_list = [5, 6]
+time_list = [1.4, 1.7]
+ifreq_list='all'
+
+wrapper_beam_vel_prof(shot_list, isweep_list, time_list,
                     rhomin=0.75, rhomax=1.05, tavg=0.2, xmode=1, channelvals=[4])
 
 
 #%%
-wrapper_beam_vel_prof(shot_list=[81065, 81084], isweep_list=[9, 9], time_list=[1.7, 1.7],
+shot_list=[82547, 81084]
+isweep_list = [5, 9]
+time_list = [1.3, 1.7]
+ifreq_list='all'
+
+wrapper_beam_vel_prof(shot_list, isweep_list, time_list,
                     rhomin=0.75, rhomax=1.05, tavg=0.2, xmode=1, channelvals=[4])
+
+
+#%%
+shot_list=[82556, 81084]
+isweep_list = [3, 5]
+time_list = [0.7, 0.7]
+ifreq_list='all'
+
+wrapper_beam_vel_prof(shot_list, isweep_list, time_list,
+                    rhomin=0.75, rhomax=1.05, tavg=0.2, xmode=1, channelvals=[4])
+#%%
+shot=82556
+isweep = 3
+ifreq_list='all'
+
+plot_beam_on_prof(shot, isweep, ifreq_list, ax=None, cprof='black', cref='blue', chop='red', plot_k_perp=False)
+   
+    
+   
+#%% PREPARE BEAMTRACING
+shotnb = 82556
+isweep_list = [3,4,5,6]
+
+for i, isweep in enumerate(isweep_list):
+    _DBSbeam('tcv',shot=shotnb, isweep=isweep, xmode=1, channelval=3, verbose=True, plot=True, load_if_existing=True)
+    _DBSbeam('tcv',shot=shotnb, isweep=isweep, xmode=1, channelval=4, verbose=True, plot=True, load_if_existing=True)
+    
+
+
+

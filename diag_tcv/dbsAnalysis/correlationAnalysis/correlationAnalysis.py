@@ -296,7 +296,13 @@ class CorrelationAnalysis(TCVShot):
         # freq_list_ref = self.processedData['sweep'+str(isweep)]['freq_list_ref']
         ### index of frequencies to be used
         if ifreq_list is None:
-            ifreq_list = self.processedData['sweep'+str(isweep)]['ifreq_list']
+            # ifreq_list = self.processedData['sweep'+str(isweep)]['ifreq_list']
+            
+            freq_ref = self.params_ref.F
+            freq_hop = self.params_hop.F
+            nbfreq = len(freq_hop)
+            ifreq_list=np.linspace(0,nbfreq-1, nbfreq, dtype=int)
+            
         # t_reduced_list_ref = self.processedData['sweep'+str(isweep)]['t_reduced_list_ref']
         
         # freq_list_hop = self.corrSigDic['freq_list_hop']
@@ -701,89 +707,3 @@ class CorrelationAnalysis(TCVShot):
 # plt.ylabel('coherence')
     
     
-# %% DEPRECATED
-
-    # def get_normalized_data_list(self):
-    #     '''
-    #     From raw data gives the normalized complex data without the transitory region at beginning of freq
-    #     '''
-        
-    #     t = self.rawSigDic['t']
-    #     freq_list_hop = self.rawSigDic['freq_list_hop']
-    #     I_ref_list = self.rawSigDic['I_list_ref']
-    #     Q_ref_list = self.rawSigDic['Q_list_ref']
-    #     I_hop_list = self.rawSigDic['I_list_hop']
-    #     Q_hop_list = self.rawSigDic['Q_list_hop']
-        
-    #     t_reduced, _ = remove_signal_edges(t[0,:], I_ref_list[0,:], dtstart=400.e-6, dtend=100.e-6, axis=-1)
-       
-    #     z_list_ref = np.zeros((len(freq_list_hop), len(t_reduced)), dtype='complex')
-    #     z_list_hop = np.zeros((len(freq_list_hop), len(t_reduced)), dtype='complex')
-        
-    #     t_reduced_list_ref = np.zeros((len(freq_list_hop), len(t_reduced)))
-    #     t_reduced_list_hop = np.zeros((len(freq_list_hop), len(t_reduced)))
-        
-    #     for i in range(len(freq_list_hop)):
-    #         t_reduced_ref_loc,I_ref_loc = remove_signal_edges(t[i,:], I_ref_list[i,:], dtstart=400.e-6, dtend=100.e-6, axis=-1)
-    #         _,Q_ref_loc = remove_signal_edges(t[i,:], Q_ref_list[i,:], dtstart=400.e-6, dtend=100.e-6, axis=-1)
-    
-    #         z_ref_loc = get_normalized_complex_signal(I_ref_loc, Q_ref_loc, self.rawSigDic['params_ref'].phase_cor)
-            
-    #         t_reduced_hop_loc,I_hop_loc = remove_signal_edges(t[i,:], I_hop_list[i,:], dtstart=400.e-6, dtend=100.e-6, axis=-1)
-    #         _,Q_hop_loc = remove_signal_edges(t[i,:], Q_hop_list[i,:], dtstart=400.e-6, dtend=100.e-6, axis=-1)
-    
-    #         z_hop_loc = get_normalized_complex_signal(I_hop_loc, Q_hop_loc, self.rawSigDic['params_hop'].phase_cor)
-        
-    #         z_list_ref[i,:] = z_ref_loc
-    #         z_list_hop[i,:] = z_hop_loc
-            
-    #         t_reduced_list_ref[i,:] = t_reduced_ref_loc
-    #         t_reduced_list_hop[i,:] = t_reduced_hop_loc 
-        
-    #     corrSigDic = dict()
-    #     corrSigDic['t'] = t
-    #     corrSigDic['t_reduced_list_ref'] = t_reduced_list_ref
-    #     corrSigDic['t_reduced_list_hop'] = t_reduced_list_hop
-    #     corrSigDic['freq_list_ref'] = self.rawSigDic['freq_list_ref']
-    #     corrSigDic['freq_list_hop'] = freq_list_hop
-    #     corrSigDic['z_list_ref'] = z_list_ref
-    #     corrSigDic['z_list_hop'] = z_list_hop
-        
-    #     self.corrSigDic = corrSigDic
-        
-    # def get_coherence_list(self, method='spectral'):
-    #     '''
-    #     return the correlation spectra and max for the whole list of freq
-    #     method: 
-    #     spectral => using normalized cpsd
-    #     time => using pearson correlation coefficients
-    #     '''
-    #     freq_list_hop = self.corrSigDic['freq_list_hop']
-
-    #     #params
-    #     nperseg=1024
-    #     noverlap=512
-        
-    #     coh_list = np.zeros((len(freq_list_hop), nperseg))
-    #     coh_max_list = np.zeros((len(freq_list_hop)))
-        
-    #     for i in range(len(freq_list_hop)):
-    #         z_ref = self.corrSigDic['z_list_ref'][i]
-    #         z_hop = self.corrSigDic['z_list_hop'][i]
-            
-    #         dt = self.corrSigDic['t'][i,1] - self.corrSigDic['t'][i,0]
-            
-    #         if self.modeCorrelation==True:
-    #             z_ref = np.conjugate(z_ref)
-            
-    #         if method=='time':
-    #             f, coh = custom_time_coherence(z_hop, z_ref, nperseg=1024, noverlap=512)
-    #         else:
-    #             f,coh = custom_coherence((z_hop), (z_ref), nperseg=1024,noverlap=512, dt=dt, window='hanning',remove_mean=True)
-                
-                
-    #         coh_list[i,:] = coh            
-    #         coh_max_list[i] = np.max(coh)
-            
-    #     self.corrSigDic['coh_list'] = coh_list
-    #     self.corrSigDic['coh_max_list'] = coh_max_list

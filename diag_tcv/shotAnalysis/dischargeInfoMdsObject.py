@@ -227,7 +227,7 @@ def plot_prof(array, t, rho, time_list, array_err = None, ax=None, rhomin=0, rho
 ### get data from tcv ###
 ### ================= ###
 class TCVShot():
-    # NOTE: Not all data is available from any Lac#, connect to standard LAC to be shure
+    # NOTE: Not all data is available from any Lac#, connect to standard LAC to be sure
     # data = MDSplus.Data.execute(query)
     
     def __init__(self, shot, verbose=False):
@@ -338,6 +338,7 @@ class TCVShot():
         '''
         print('\n Loading ECRH')
 
+        #loading real values of ECH ?
         try:
             self.ecrh = self.tree.getNode('\RESULTS::TORAY.INPUT:P_GYRO').data()
             self.ecrh_tot = self.ecrh[11,:]
@@ -347,6 +348,18 @@ class TCVShot():
             print('No ECRH data')
             self.tag_ecrh = False
 
+        #loading value of power cluster =>  those that we program (in kW)
+        try:
+            self.ecrh_cluster_a = self.tree.getNode('\pcs::power_cluster_A').data()/1e3
+            self.ecrh_cluster_b = self.tree.getNode('\pcs::power_cluster_B').data()/1e3
+            self.ecrh_cluster_c = self.tree.getNode('\pcs::power_cluster_C').data()/1e3
+            self.ecrh_cluster_a_time = self.tree.getNode('\pcs::power_cluster_A').dim_of().data()
+            self.ecrh_cluster_b_time = self.tree.getNode('\pcs::power_cluster_B').dim_of().data()
+            self.ecrh_cluster_c_time = self.tree.getNode('\pcs::power_cluster_C').dim_of().data()
+            self.tag_ecrh_cluster = True
+        except:
+            print('No ECRH cluster data')
+            self.tag_ecrh_cluster = False
 
     def get_cxrs_fit(self, set_nan_to_zero=True):
         '''
@@ -921,6 +934,8 @@ class TCVShot():
                 
         if self.tag_ecrh:
             if color is None:
+                ax.plot(self.ecrh_cluster_a_time, self.ecrh_cluster_a, color='xkcd:dark orange', label='ECRH ref a')
+                ax.plot(self.ecrh_cluster_b_time, self.ecrh_cluster_b, color='xkcd:dirty orange', label='ECRH ref b')
                 ax.plot(self.ecrh_time, self.ecrh_tot, color='xkcd:dark yellow', label='ECRH tot', **kwargs)
             else:
                 ax.plot(self.ecrh_time, self.ecrh_tot, marker='s',linewidth=0.2, markersize=5, markevery=500, color=color, label='ECRH tot', **kwargs)
@@ -971,6 +986,7 @@ class TCVShot():
         if self.tag_fir:
             axs[1,1].plot(self.fir_time, self.fir_int_ne/10**19, color='xkcd:dark green', label='FIR ne')
             axs[1,1].plot(self.ref_int_ne_time, self.ref_int_ne, color='black', label='FIR ne ref')
+            axs[1,1].set_ylim(0, np.max(self.fir_int_ne/10**19)*1.1)
         axs[1,1].set_ylabel(r'FIR $n_e$ $[10^{19}]$')
         if self.tag_th_time:
             axs[1,1].set_xlim(self.th_time[0], self.th_time[-1])

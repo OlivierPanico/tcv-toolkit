@@ -23,13 +23,13 @@ machine = 'tcv'
 # shot, twindow = 80957, [0.4, 0.6]
 # shot, twindow = 80985, [1, 1.2]
 # shot, twindow = 81069, [1.6, 1.8]
-shot, twindow = 81087, [0.6, 0.8]
+shot, twindow = 82549, [0.9, 1]
 
 modex, anglepol, zshift = 1, -50, 0.0
 
 # FreqGHz = np.linspace(48.5, 75, 6)
 # FreqGHz = [51, 56, 58, 61, 65, 70, 72.5, 66, 62, 55, 50, 53, 59, 63, 67, 71, 73, 64, 60, 54]#np.linspace(48, 70, 6)
-# FreqGHz = [58,63,68.7]
+# FreqGHz = [58,62,67.6]
 FreqGHz = [54, 58,63]
 
 
