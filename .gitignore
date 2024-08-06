@@ -1,0 +1,20 @@
+*.ps
+*.mat
+# *.txt
+*.dat
+*.pyc
+*.depr*
+*.ipynb_checkpoints
+*.ipynb
+*.pdf
+_py*
+
+# ignore logs
+hooks/log/*
+beamtracing/log/*
+
+*.egg-info*
+.vscode/*
+
+
+# sandbox

@@ -28,8 +28,12 @@ from dataAnalysis.utils.plot_utils import plot_1d, my_legend, my_text
 from dataAnalysis.spectral.spectralAnalysis import custom_coherence, custom_time_coherence
  
 #TCV
-from diag_tcv.shotAnalysis.dischargeInfoMdsObject import TCVShot
-
+# from diag_tcv.shotAnalysis.dischargeInfoMdsObject import TCVShot
+# replace by empty class:
+class TCVShot:
+    def __init__(self, shot, verbose=False, *args, **kwargs):
+        self.shot = shot
+        self.verbose = verbose
 
 ### ========== ###
 ### PARAMETERS ###
@@ -598,15 +602,15 @@ class CorrelationAnalysis(TCVShot):
            
            
            
-# if __name__ == '__main__':
-#     a=CorrelationAnalysis(79797)
-#     isweep_list=[3,4,5,6,7,8]
-#     ifreq_list=np.linspace(20,39,20)
-#     fig, ax = plot_1d([],[])
-#     for i,sweeploc in enumerate(isweep_list):
-#         a.wrapper_coherence_analysis(sweeploc, ifreq_list)
-#         ax.plot(a.corrSigDic['freq_list_hop']-a.corrSigDic['freq_list_ref'],
-#                 a.corrSigDic['coh_max_list'], marker='+')
+if __name__ == '__main__':
+    a=CorrelationAnalysis(79797)
+    isweep_list=[3,4,5,6,7,8]
+    ifreq_list=np.linspace(20,39,20)
+    fig, ax = plot_1d([],[])
+    for i,sweeploc in enumerate(isweep_list):
+        a.wrapper_coherence_analysis(sweeploc, ifreq_list)
+        ax.plot(a.corrSigDic['freq_list_hop']-a.corrSigDic['freq_list_ref'],
+                a.corrSigDic['coh_max_list'], marker='+')
     
     # a=CorrelationAnalysis(80338)
     # isweep_list=[2,3,4,5]
