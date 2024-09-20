@@ -172,7 +172,7 @@ def plot_time(array, t, rho, rho_list, array_err=None, ax=None, tmin=0, tmax=-1,
             
             ax.fill_between(t, array_loc-array_err_loc, array_loc+array_err_loc, color=color, alpha=0.2)
     if legend:
-        ax.legend(fontsize='8')
+        ax.legend(fontsize='10')
     ax.set_xlabel('T [s]')
     # ax.ticklabel_format(axis='y', style='sci', scilimits=(19,19))
 
@@ -327,8 +327,8 @@ class TCVShot():
     def get_ecrh(self, set_nan_to_zero = True):
         '''
         ECRH data structure:
-            12 colums: 1 to 6 => power from lines 1 to 6 (X2 launchers usually)
-                    7 to 9 => power from lines 7 to 9 (X3 launchers usually)
+            12 colums: 1 to 6 => power from lines 1 to 6 (X2 launchers)
+                    7 to 9 => power from lines 7 to 9 (X3 launchers)
                     10 to 11 => power from launchers 10 / 11
                     last column => total power
         to access the total power :
@@ -575,24 +575,13 @@ class TCVShot():
         th_te_loc = th_te_prof_loc[rho_te_loc]
         
         cs = np.sqrt(e*th_te_loc/(self.m_i))  #sound speed in m/s
-        print('ok sound speed')
         
         r_ind = get_closest_ind(self.mag_eq_rgrid, r)
         z_ind = get_closest_ind(self.mag_eq_zgrid, z)
         
         _btor_loc = abs(self.btor[r_ind, z_ind])
 
-        # _btor_loc = np.mean(self.btor, axis=1) #Avg btor over z to have radial estimate
-        print('ok btor ; shape:', _btor_loc.shape)
-    
-        
         omega_cs = (e*_btor_loc)/(self.m_i) #frequency in s**-1
-        print('ok cycl freq: ', omega_cs)
-        # return cs, omega_cs
-        # self.rho_s = cs/omega_cs #sound larmor radius in m
-        # print('ok rho_s')
-        # self.tag_rho_s = True
-        # print('ok tag')
         
         return cs/omega_cs
         
@@ -903,7 +892,7 @@ class TCVShot():
 
             
     
-    def plot_heating(self, ax=None, color=None, **kwargs):
+    def plot_heating(self, plot_ref=False, ax=None, color=None, **kwargs):
         self.get_nbi()
         self.get_ecrh()
         
@@ -915,14 +904,16 @@ class TCVShot():
             if self.tag_nb1:
                 if color is None:
                     ax.plot(self.nbi_time, self.nb1*1e3, color='red', label='NB1', **kwargs)
-                    ax.plot(self.nb1_ref_time, self.nb1_ref*1e3, color='xkcd:dark red', label='NB1 ref')
+                    if plot_ref:
+                        ax.plot(self.nb1_ref_time, self.nb1_ref*1e3, color='xkcd:dark red', label='NB1 ref')
                 else:
                     ax.plot(self.nbi_time, self.nb1*1e3,linestyle='--', marker='o', linewidth=0.2, markersize=5, markevery=500, color=color, label='NB1', **kwargs)
                 
         if self.tag_nb2:
             if color is None:
                 ax.plot(self.nbi_time, self.nb2*1e3, color='green', label='NB2', **kwargs)
-                ax.plot(self.nb2_ref_time, self.nb2_ref*1e3, color='xkcd:dark green', label='NB2 ref')
+                if plot_ref:
+                    ax.plot(self.nb2_ref_time, self.nb2_ref*1e3, color='xkcd:dark green', label='NB2 ref')
             else:
                 ax.plot(self.nbi_time, self.nb2*1e3, linestyle='dotted', color=color, label='NB2', **kwargs)
         
@@ -934,8 +925,9 @@ class TCVShot():
                 
         if self.tag_ecrh:
             if color is None:
-                ax.plot(self.ecrh_cluster_a_time, self.ecrh_cluster_a, color='xkcd:dark orange', label='ECRH ref a')
-                ax.plot(self.ecrh_cluster_b_time, self.ecrh_cluster_b, color='xkcd:dirty orange', label='ECRH ref b')
+                if plot_ref:
+                    ax.plot(self.ecrh_cluster_a_time, self.ecrh_cluster_a, color='xkcd:dark orange', label='ECRH ref a')
+                    ax.plot(self.ecrh_cluster_b_time, self.ecrh_cluster_b, color='xkcd:dirty orange', label='ECRH ref b')
                 ax.plot(self.ecrh_time, self.ecrh_tot, color='xkcd:dark yellow', label='ECRH tot', **kwargs)
             else:
                 ax.plot(self.ecrh_time, self.ecrh_tot, marker='s',linewidth=0.2, markersize=5, markevery=500, color=color, label='ECRH tot', **kwargs)
@@ -949,7 +941,7 @@ class TCVShot():
         
         return ax
 
-    def plot_summary(self):
+    def plot_summary(self, return_fig=False):
         
         
         self.get_thomson_fit()
@@ -958,7 +950,7 @@ class TCVShot():
         self.get_FIR()
         self.get_h_factor()
         
-        fig ,axs = prep_multiple_subplots(3,3, figsize=(12,8), axgrid=[0,1,2,3,4,5,6,7,8], sharex=False)
+        fig ,axs = prep_multiple_subplots(3,3, figsize=(14,10), axgrid=[0,1,2,3,4,5,6,7,8], sharex=False)
         fig.suptitle('#{}'.format(self.shot))
         
         #Ip
@@ -991,7 +983,8 @@ class TCVShot():
         if self.tag_th_time:
             axs[1,1].set_xlim(self.th_time[0], self.th_time[-1])
         axs[1,1].set_xlabel('T [s]')
-        axs[1,1].legend()
+        axs[1,1].legend(fontsize='12')
+
         #vtor 
         if self.tag_cxrs_vtor:
             plot_time(np.transpose(self.cxrs_vtor), self.cxrs_vtor_time, self.cxrs_rho, [0.6,0.8,0.95], array_err=np.transpose(self.cxrs_vtor_err), ax=axs[2,1], tmin=0, tmax=-1, rhoavg=0, legend=False)
@@ -1008,15 +1001,17 @@ class TCVShot():
         if self.tag_th_te:
             plot_time(self.th_te, self.th_time, self.th_rho, [0.9], array_err=self.th_te_err, ax=axs[2,2], tmin=0, tmax=-1, rhoavg=0.1, label=r'$T_e$ $\rho=0.9$', color='blue')
         if self.tag_cxrs_ti:
-            plot_time(np.transpose(self.cxrs_ti), self.cxrs_time, self.cxrs_rho, [0.9], array_err=np.transpose(self.cxrs_ti_err), ax=axs[2,2], tmin=0, tmax=-1, rhoavg=0, label=r'$T_i$, $\rho=0.9$', color='red')
+            plot_time(np.transpose(self.cxrs_ti), self.cxrs_time, self.cxrs_rho, [0.9], array_err=np.transpose(self.cxrs_ti_err), ax=axs[2,2], tmin=0, tmax=-1, rhoavg=0.1, label=r'$T_i$, $\rho=0.9$', color='red')
             axs[2,2].set_xlim(self.cxrs_time[0], self.cxrs_time[-1])
         axs[2,2].set_ylabel(r'$T_e$, $T_i$ $[eV]$')
         
         
-        axs[0,1].legend(fontsize='10')
+        axs[0,1].legend(fontsize='12', loc = "lower right")
     
-        # plt.tight_layout()
-
+        plt.tight_layout()
+        
+        if return_fig:
+            return fig, axs
 
 
 
@@ -1337,8 +1332,8 @@ def plot_profiles_comparison_single_column(shot_list, time_list, plot_err=None, 
                         label='#{}, T={:.3f}'.format(shot_list[i], list_obj_tcv[i].cxrs_time[cxrs_time_ind_list[i]]), color=color_list[i], marker='')
             axs[2].fill_between(cxrs_rho, (cxrs_ti-cxrs_ti_err)/1e3, (cxrs_ti+cxrs_ti_err)/1e3, color=color_list[i], alpha=0.2)
             
-      
-        axs[0].legend(fontsize="8")
+    
+        axs[0].legend(fontsize="8", loc = 'bottom right')
 
     except:
         print('No CXRS data')

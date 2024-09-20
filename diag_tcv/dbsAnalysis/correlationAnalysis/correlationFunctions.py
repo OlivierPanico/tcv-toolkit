@@ -7,6 +7,8 @@ from dataAnalysis.utils.plot_utils import plot_1d, my_text, my_legend
 from dataAnalysis.spectral.spectralAnalysis import custom_csd, custom_time_coherence
 import scipy
 import scipy.signal as signal
+from scipy.optimize import curve_fit
+import math as mp
 
 '''
 Input: zref, zhop, dt
@@ -63,10 +65,11 @@ def compute_spectral_coherence(psd_ref, psd_hop, csd):
     return spectral_coh
 
 # Step 3: ifftshift + inverse Fourier transform to obtain the correlation function
-def compute_correlation_function(csd, dt, mode='full'):
+def compute_correlation_function(csd, dt, nperseg = 1024, mode='full'):
     csd_ifftshift = np.fft.ifftshift(csd)
     corr_from_csd = np.fft.ifft(csd_ifftshift)/dt       
-    return corr_from_csd
+    tcorr_spec = scipy.signal.correlation_lags(nperseg, nperseg, mode='same')*dt
+    return corr_from_csd, tcorr_spec
 
 # Step 4: fftshift on the correlation function to replace peak at the center
 def shift_correlation_function(corr_from_csd):
@@ -110,30 +113,55 @@ def full_coherence_analysis(zref, zhop, dt, nperseg=1024, noverlap=512, window=N
     spectral_coh = compute_spectral_coherence(psd_ref, psd_hop, csd)
     
     # from fourier to real space
-    corr_from_csd = compute_correlation_function(csd, dt)
+    corr_from_csd, tcorr_spec = compute_correlation_function(csd, dt, nperseg=nperseg)
     corr = shift_correlation_function(corr_from_csd)
-    tcorr_spec = scipy.signal.correlation_lags(nperseg, nperseg, mode='same')*dt
     
     # for tests (correlation directly in real space using scipy.signal.correlate)
-    # tcorr_scipy, corr = scipy_correlation_function(zref_norm, zhop_norm, dt, nperseg=nperseg, noverlap=noverlap, window=window, remove_mean=remove_mean)
+    tcorr_scipy, corr_scipy = scipy_correlation_function(zhop_norm,zref_norm, dt, nperseg=nperseg, noverlap=noverlap, window=window, remove_mean=remove_mean)
+    
+    # Estimate the maximum of the correlation functions
+    a_lorentz, amp_err, max_spectral_coh_raw = estimate_max_spectral_coh(fcsd, spectral_coh, plot=plot)
+    max_corr_delay, max_corr = get_max_corr_delay(tcorr_spec, corr)
+    max_corr_scipy_delay, max_corr_scipy = get_max_corr_delay(tcorr_scipy, corr_scipy)
     
     if plot:
         # Plotting the results
         if ax is None:
             fig, ax = plot_1d([], [], grid=True)
+            # fig2, ax2 = plot_1d([], [], grid=True)
         # ax.plot(tcorr_spec*1e6,(corr), color='darkorchid', label='correlation function', markersize=2)
         ax.plot(tcorr_spec*1e6,np.sqrt(corr.real**2+corr.imag**2), label='amplitude', marker='')
         ax.set_xlabel(r'delay $[\mu_s]$')
         ax.set_ylabel('correlation')
         # plt.legend()
-        plt.title('Spectral correlation function')
-        plt.xlim(-20, 20)
-        plt.ylim(-0.4, 1)
+        # plt.title('Spectral correlation function')
+        ax.set_xlim(-5, 5)
+        ax.set_ylim(-0.1, 1)
+        
+        # ax2.plot(fcsd/1e6, spectral_coh, label='spectral coherence', marker='')
+        # ax2.set_xlim(-2,2)
+        # ax2.set_ylim(-0.1, 1.1)
+        # ax2.set_xlabel(r'frequency $[MHz]$')
+        # ax2.set_ylabel('coherence')
+
     
-    if verbose:
-        print('Full coherence analysis done')
+    dictFullCohAnalysis = dict()
+    dictFullCohAnalysis['tcorr_spec'] = tcorr_spec
+    dictFullCohAnalysis['corr'] = corr
+    dictFullCohAnalysis['fcsd'] = fcsd
+    dictFullCohAnalysis['spectral_coh'] = spectral_coh
+    dictFullCohAnalysis['tcorr_scipy'] = tcorr_scipy
+    dictFullCohAnalysis['corr_scipy'] = corr_scipy
+    dictFullCohAnalysis['max_fit_spectral_coh'] = a_lorentz
+    dictFullCohAnalysis['err_max_fit_spectral_coh'] = amp_err
+    dictFullCohAnalysis['max_raw_spectral_coh'] = max_spectral_coh_raw
+    dictFullCohAnalysis['max_corr_delay'] = max_corr_delay
+    dictFullCohAnalysis['max_corr'] = max_corr
+    dictFullCohAnalysis['max_corr_scipy_delay'] = max_corr_scipy_delay
+    dictFullCohAnalysis['max_corr_scipy'] = max_corr_scipy
     
-    return tcorr_spec, corr, fcsd, spectral_coh
+    return dictFullCohAnalysis
+
 
 # step 5: get maximum of correlation & associated delay 
 def get_max_corr_delay(tcorr, corr):
@@ -142,70 +170,85 @@ def get_max_corr_delay(tcorr, corr):
     max_corr_delay = tcorr[max_corr_ind]
     return max_corr_delay, max_corr
 
+# Define a Lorentzian function
+def lorentzian(x, a, x0, FWHM):
+    return a / ((x-x0)**2 / (FWHM/2)**2 + 1)
 
+def custom_lorentz_fit_wrapper(xdata, ydata, p0=None, verbose=False, **kwargs):
+    
+    # remove any NaNs from the data:
+    mask = np.isnan(ydata) | np.isnan(xdata)
+    xdata = xdata[~mask]
+    ydata = ydata[~mask]
 
-def plot_correlation_slopes(xdata, ydata, rho_s=None, ind_turb=None, ind_aval=None, ind_turb_pos=None, caption=True, xunit='rho_s', ax=None, color='teal', ylog=True):
-    '''
-    xunit: 'rho_s' or 'cm'
-    '''
-    if xunit=='cm':
-        xdata = xdata*rho_s
+    # initial guess for fit parameters
+    bounds = kwargs.pop('bounds', None)
+    
+    if p0 is None:
+        # Initial guess for the Gaussian fit parameters
+        p0 = [np.max(ydata), np.mean(xdata), np.std(xdata)]
         
-    if ax is None:
+    if not bounds:
+        # we just need to make sure that amplitude and FWHM are positive (otherwise, the subsequent Taylor fit might fail due to poor initial guess)
+        bounds = ([0, -np.inf, 0], [np.inf, np.inf, np.inf])
+    
+    popt, pcov = curve_fit(lorentzian, xdata, ydata, p0=p0, bounds=bounds, **kwargs)
+    
+    return popt, pcov
+
+def estimate_max_spectral_coh(fcsd, spectral_coh, plot=False):
+
+    xdata=fcsd/1e6
+    ydata=abs(spectral_coh)
+
+
+
+    #We remove the zero frequency
+    ydata_for_fit = ydata.copy()
+    ydata_for_fit[len(xdata)//2]= mp.nan
+    
+    # cleaning large frequencies
+    ydata[xdata<-1]=0
+    ydata[xdata>1]=0
+    ydata_for_fit[xdata<-1]=0
+    ydata_for_fit[xdata>1]=0
+    
+    # bounds and initial guess => that is the tricky part
+    bounds = ([0, -2, 0], [max(ydata), 2 , 5]) #bounds for the fit parameters: amplitude, center, FWHM
+    p0 = [max(ydata), 0, 2] #initial guess for the fit parameters: amplitude, center, FWHM
+
+
+    # fit
+    popt, pcov = custom_lorentz_fit_wrapper(xdata, ydata_for_fit,p0=p0,bounds=bounds, verbose=False)
+
+    # error is estimated as the max of the standard deviation and the amplitude of the spectral coherence
+    param_errors = np.sqrt(np.diag(pcov))
+    a_lorentz_err, x0_err, FWHM_err = param_errors
+    amp_err = max(a_lorentz_err, np.std(ydata))
+
+    a_lorentz = popt[0]
+    x0 = popt[1]
+    FWHM = popt[2]
+    max_spectral_coh_raw = np.max(abs(ydata))
+    
+    if abs(max_spectral_coh_raw-a_lorentz)/max_spectral_coh_raw > 0.3:
+        print('Warning: the maximum of the spectral coherence is not well estimated by the Lorentzian fit: raw max = {:.2f}, est. max = {:.2f} +/- {:.2f}'.format(max_spectral_coh_raw, a_lorentz, amp_err))
+    
+    
+    if plot:
+        ylorentz = lorentzian(xdata, a_lorentz, x0, FWHM)
+        
         fig, ax = plot_1d([], [], grid=True)
+        ax.plot(xdata, ydata, color='red', label='spectral coherence')
+        ax.plot(xdata, ylorentz, color='black', label='lorentzian fit')
+        ax.set_ylabel('Coherence')
+        my_legend(ax, loc='upper right')
+        ax.set_xlim(-2, 2)
+        ax.set_xlabel('Frequency [MHz]')
+        ax.set_ylim(-0.1, 1.1)
+        my_text(ax, 0.2, 0.9, 'raw max = {:.2f}'.format(np.max(abs(ydata))), color='black', fontsize=12)
+        my_text(ax, 0.2, 0.75, 'est. max = {:.2f} +/- {:.2f}'.format(a_lorentz, amp_err), color='black', fontsize=12)
+        
+    return a_lorentz, amp_err, max_spectral_coh_raw
     
-    ax.plot(xdata, (ydata), 'o', color=color)
-    if caption:
-        my_text(ax, 0.4, 0.9, r'$\rho_s$ = {:.2f} cm'.format(rho_s[0]), fontsize=12, color='k')
-
-    if ind_turb is not None:
-        ind_turb_min=ind_turb[0]    
-        ind_turb_max=ind_turb[1]
-        popt, perr, rsquared = my_linearRegression(xdata[ind_turb_min:ind_turb_max], np.log(ydata[ind_turb_min:ind_turb_max]), mode='affine')
-        ax.plot(xdata[ind_turb_min:ind_turb_max], np.exp(popt[0]*xdata[ind_turb_min:ind_turb_max]+ popt[1]), 'r', marker='')
-        if caption:
-            if xunit=='rho_s':
-                my_text(ax, 0.15, 0.9, r'$L_c \approx$ {:.2f} $\rho_s$'.format(1/popt[0]), fontsize=12, color='r')
-            elif xunit=='cm':
-                my_text(ax, 0.15, 0.9, r'$L_c \approx$ {:.2f} cm'.format(1/popt[0]), fontsize=12, color='r')
-            
-    if ind_aval is not None:
-        ind_aval_min=ind_aval[0]
-        ind_aval_max=ind_aval[1]
-        popt, perr, rsquared = my_linearRegression(xdata[ind_aval_min:ind_aval_max], np.log(ydata[ind_aval_min:ind_aval_max]), mode='affine')
-        ax.plot(xdata[ind_aval_min:ind_aval_max], np.exp(popt[0]*xdata[ind_aval_min:ind_aval_max] + popt[1]), 'g', marker='')
-        if caption:
-            if xunit=='rho_s':
-                my_text(ax, 0.15, 0.75, r'$L_a \approx$ {:.2f} $\rho_s$'.format(1/popt[0]), fontsize=12, color='g')
-            elif xunit=='cm':
-                my_text(ax, 0.15, 0.75, r'$L_a \approx$ {:.2f} cm'.format(1/popt[0]), fontsize=12, color='g')
-
-    if ind_turb_pos is not None:
-        ind_turb_min=ind_turb_pos[0]
-        ind_turb_max=ind_turb_pos[1]
-        popt, perr, rsquared = my_linearRegression(xdata[ind_turb_min:ind_turb_max], np.log(ydata[ind_turb_min:ind_turb_max]), mode='affine')
-        ax.plot(xdata[ind_turb_min:ind_turb_max], np.exp(popt[0]*xdata[ind_turb_min:ind_turb_max]+ popt[1]), 'b', marker='')
-        if caption:
-            if xunit=='rho_s':
-                my_text(ax, 0.15, 0.6, r'$L_c \approx$ {:.2f} $\rho_s$'.format(1/popt[0]), fontsize=12, color='b')
-            elif xunit=='cm':
-                my_text(ax, 0.15, 0.6, r'$L_c \approx$ {:.2f} cm'.format(1/popt[0]), fontsize=12, color='b')
-
-    if ylog:
-        plt.yscale('log')
     
-    plt.ylim(0.1,1.1)
-    plt.ylabel('correlation')
-    plt.axhline(1, color='black', linestyle='--')
-    plt.axvline(0, color='black', linestyle='--')
-    
-    if xunit=='rho_s':
-        plt.xlabel(r'$\Delta$ $[\rho_s]$')
-    elif xunit=='cm':
-        plt.xlabel(r'$\Delta$ $[cm]$')
-    
-    return ax
-
-
-
-# %%

@@ -24,19 +24,20 @@ from DBS.processing.sigprocessing import remove_signal_edges, get_normalized_com
 from DBS.beamtracing.interface import Beam3dInterface #raytracing
 from DBS.beamtracing.DBSbeam import _DBSbeam
 #dataAnalysis
-from dataAnalysis.utils.plot_utils import plot_1d, my_legend, my_text
+from dataAnalysis.utils.plot_utils import plot_1d, plot_2d, my_legend, my_text, prep_multiple_subplots
 from dataAnalysis.spectral.spectralAnalysis import custom_coherence, custom_time_coherence
- 
+from dataAnalysis.utils.utils import find_plateaus, my_linearRegression
 #TCV
 from diag_tcv.shotAnalysis.dischargeInfoMdsObject import TCVShot
-
+from diag_tcv.dbsAnalysis.velocityProfile.velocityFunctions import get_velocity_prof_object
 
 ### ========== ###
 ### PARAMETERS ###
 ### ========== ###
-cmap='viridis'
-cmap='jet'
-
+# cmap='viridis'
+# cmap='jet'
+cmap='Dark2'
+markers = ['o', '^', 's', 'D', 'x', 'v', '<', '>', 'p', 'h']
 ### PHYSICAL CONSTANTS ###
 
 
@@ -76,6 +77,14 @@ class CorrelationAnalysis(TCVShot):
         self.processedData = dict()
         for i in range(self.nbsweep):
             self.processedData['sweep'+str(i+1)] = dict()
+
+        ### Identificiation of the plateaus on reference frequencies ###
+        plateaus_indices = find_plateaus(self.params_ref.F)
+        nb_plateaus = len(plateaus_indices)
+        print(' --> {} plateaus '.format(nb_plateaus))
+        self.plateaus_indices = plateaus_indices
+        self.nb_plateaus = nb_plateaus
+
 
     def _load_sweep_params(self):
         if self.numDemod:
@@ -147,7 +156,7 @@ class CorrelationAnalysis(TCVShot):
         self.processedData['sweep'+str(isweep)]['data_hop'] = data_hop
         
         
-    def plot_freq_pattern_sweep(self, isweep=1):
+    def plot_freq_pattern_sweep(self, isweep=1, title=None, returnfig=False):
         '''
         Plot the pattern used for the given sweep
         '''
@@ -159,26 +168,61 @@ class CorrelationAnalysis(TCVShot):
         freq_hop = self.params_hop.F
         
         fig, ax = plot_1d([],[], grid=True)
-        ax.set_title(' #{} sweep {}'.format(self.shot, isweep))
-        
-        if self.same_nbpts_per_freq==True:
-            ax.plot(t0F_structured_ref, freq_ref, color='blue', label='ref')
-            ax.plot(t0F_structured_hop, freq_hop, color='red', label='hop')
+        if title is None:
+            ax.set_title(' #{} sweep {}'.format(self.shot, isweep))
         else:
-            ax.scatter(t0F_structured_ref, freq_ref, color='blue',label='ref')
-            ax.plot(t0F_structured_hop, freq_hop, color='red', label='hop')
-            arrow_length = np.diff(data_ref.params.t0F)
+            ax.set_title(title)
             
+        if self.same_nbpts_per_freq==True:
+            ax.plot(t0F_structured_ref, freq_ref, color='blue', marker='o',linestyle='', label='reference channel')
+            ax.plot(t0F_structured_hop, freq_hop, color='red', marker='^',linestyle='', label='hopping channel')
+        else:
+            ax.scatter(t0F_structured_ref, freq_ref, color='blue', marker='o',linestyle='', label='reference channel')
+            ax.plot(t0F_structured_hop, freq_hop, color='red', marker='^',linestyle='', label='hopping channel')
+            arrow_length = np.diff(data_ref.params.t0F)
             
             for i in range(len(freq_ref)):
                 ax.arrow(t0F_structured_ref[i], freq_ref[i], arrow_length[i], 0,zorder=5, linewidth=1.5, head_width=0, head_length=0, ec='blue')
         
         my_legend(ax)
-        ax.set_xlabel('time [s]')
-        ax.set_ylabel('freq [GHz]')
+        ax.set_xlabel('Time [s]')
+        ax.set_ylabel('Frequency [GHz]')
+        
+        if returnfig:
+            return fig, ax
 
 
+        
+    def plot_heating_with_sweeps(self, list_isweep, **kwargs):
+        
+        if 'markevery' not in kwargs:
+            kwargs['markevery'] = 20
+        
+        ax = self.plot_heating(**kwargs)
+        
+        #Nb sweep and associated times
+        sweep_tinit = self.params_ref.TDIFDOP + self.params_ref.t0seq
+        nbsweep = len(sweep_tinit)
+        self.nbsweep=nbsweep
+        period = self.params_ref.Period
+        bbox=dict(facecolor = 'white', edgecolor='black', pad=10.0)
+        for i in range(nbsweep):
+            if i+1 in list_isweep:
+                ax.axvline(sweep_tinit[i], color='black')
+                ax.axvline(sweep_tinit[i]+period*1e-3, color='black')
+                # my_text(ax, sweep_tinit[i], 0.2, '{}'.format(i+1), color='black')
+                ax.text(sweep_tinit[i]+0.1,
+                        100,
+                        '{}'.format(i+1), 
+                        horizontalalignment='center',
+                        verticalalignment='center',
+                        bbox=bbox,
+                        color='black')
+           
 
+    ### ========================== ###
+    ### ACCESS TO DATA FOR A SWEEP ###
+    ### ========================== ###
     def _get_raw_data_isweep(self, isweep, ifreq_list=None, time_window=None):
         '''
         load full isweep data for correlation
@@ -197,10 +241,19 @@ class CorrelationAnalysis(TCVShot):
             
         # self.isweep = isweep            
         # self.rawSigDic = get_raw_signals(self.shot, isweep, ifreq_list, numDemod=self.numDemod)
+        
+        ### Identificiation of the plateaus on reference frequencies ###
+        plateaus_indices = find_plateaus(self.params_ref.F)
+        nb_plateaus = len(plateaus_indices)
+        
         self.processedData['sweep'+str(isweep)]['ifreq_list'] = ifreq_list
+        self.processedData['sweep'+str(isweep)]['nb_plateaus'] = nb_plateaus
+        self.processedData['sweep'+str(isweep)]['plateaus_indices'] = plateaus_indices
+        
         self.processedData['sweep'+str(isweep)] = get_raw_signals(self.shot, isweep, ifreq_list,self.processedData['sweep'+str(isweep)],  numDemod=self.numDemod)
     
-    def get_normalized_data_isweep(self, isweep, ifreq_list=None, dtsart=400.e-6, dtend=100.e-6, ret=False):
+
+    def get_normalized_data_isweep(self, isweep, dtsart=400.e-6, dtend=100.e-6, ret=False):
         '''
         From raw data gives the normalized complex
         '''
@@ -208,8 +261,9 @@ class CorrelationAnalysis(TCVShot):
             print('Getting normalized data for sweep {}'.format(isweep))
             
         if 'data_ref' not in self.processedData['sweep'+str(isweep)]:
-            self._get_raw_data_isweep(isweep, ifreq_list)
+            self._get_raw_data_isweep(isweep, ifreq_list=None)
         
+                
         ###LOADING RAW DATA###
         t = self.processedData['sweep'+str(isweep)]['t']
         freq_list_hop = self.processedData['sweep'+str(isweep)]['freq_list_hop']
@@ -244,6 +298,7 @@ class CorrelationAnalysis(TCVShot):
             t_reduced_list_ref[i,:] = t_reduced_ref_loc
             t_reduced_list_hop[i,:] = t_reduced_hop_loc 
         
+        ### The data are stored for the whole sweep ###
         self.processedData['sweep'+str(isweep)]['dt'] = t[0,1] - t[0,0]
         self.processedData['sweep'+str(isweep)]['t_reduced_list_ref'] = t_reduced_list_ref
         self.processedData['sweep'+str(isweep)]['t_reduced_list_hop'] = t_reduced_list_hop
@@ -253,70 +308,20 @@ class CorrelationAnalysis(TCVShot):
         if ret:
             return z_list_ref, z_list_hop, t_reduced_list_ref, t_reduced_list_hop
         
-    def get_correlation_isweep(self, isweep, ifreq_list=None, nperseg=1024, noverlap=512, window=None, remove_mean=True,mode='full', plot=False):
+    def get_raytracing_isweep(self, isweep, retdata=False):
+        '''
+        Load the raytracing for the whole sweep
+        '''
         
-        if self.verbose:
-            print('Performing correlation for sweep {}'.format(isweep))
-        
-        if 'z_list_hop' not in self.processedData['sweep'+str(isweep)]:
-            self.get_normalized_data_isweep(isweep=isweep, ifreq_list=ifreq_list, dtsart=400.e-6, dtend=100.e-6)
+
+        # if self.numDemod:
+        #     output_ref, beam3d_interface_ref = _DBSbeam('tcv',shot=self.shot, isweep=isweep, xmode=self.xmode, channelval=3, ifreqs='all', verbose=self.verbose, plot=self.plot, load_if_existing=True, nrays_radial=1, nrays_azimuthal=1)
+        #     output_hop, beam3d_interface_hop = _DBSbeam('tcv',shot=self.shot, isweep=isweep, xmode=self.xmode, channelval=4, ifreqs='all', verbose=self.verbose, plot=self.plot, load_if_existing=True, nrays_radial=1, nrays_azimuthal=1)
+        # else:
+        output_ref, beam3d_interface_ref = _DBSbeam('tcv',shot=self.shot, isweep=isweep, xmode=self.xmode, channelval=1, ifreqs='all', verbose=self.verbose, plot=self.plot, load_if_existing=True, nrays_radial=1, nrays_azimuthal=1)
+        output_hop, beam3d_interface_hop = _DBSbeam('tcv',shot=self.shot, isweep=isweep, xmode=self.xmode, channelval=2, ifreqs='all', verbose=self.verbose, plot=self.plot, load_if_existing=True, nrays_radial=1, nrays_azimuthal=1)
+
     
-
-        coh_list = np.zeros((len(self.processedData['sweep'+str(isweep)]['ifreq_list']), nperseg))
-        spectral_coh_list = np.zeros((len(self.processedData['sweep'+str(isweep)]['ifreq_list']), nperseg))
-        maxcoh_list = np.zeros((len(self.processedData['sweep'+str(isweep)]['ifreq_list'])))
-        maxspectralcoh_list = np.zeros((len(self.processedData['sweep'+str(isweep)]['ifreq_list'])))
-        
-        dt=self.processedData['sweep'+str(isweep)]['dt']
-        
-        fig, axfullcoherence=plot_1d([], [], grid=True)
-        
-        for i, ifreq in enumerate(self.processedData['sweep'+str(isweep)]['ifreq_list']):
-            zref_loc = self.processedData['sweep'+str(isweep)]['z_list_ref'][ifreq]
-            zhop_loc = self.processedData['sweep'+str(isweep)]['z_list_hop'][ifreq]
-
-            tcorr_loc, coh_loc, fcsd_spectral, spectral_coh_loc = full_coherence_analysis(zref_loc, zhop_loc, dt, nperseg=nperseg, noverlap=noverlap, window=window, remove_mean=remove_mean, mode=mode, plot=plot,ax=axfullcoherence, verbose=self.verbose)
-            maxcoh = np.max(abs(coh_loc))
-            maxspectralcoh = np.max(spectral_coh_loc)
-
-            coh_list[i,:] = coh_loc
-            spectral_coh_list[i,:] = spectral_coh_loc
-            maxcoh_list[i] = maxcoh
-            maxspectralcoh_list[i] = maxspectralcoh
-        
-        self.processedData['sweep'+str(isweep)]['coh_list'] = coh_list
-        self.processedData['sweep'+str(isweep)]['spectral_coh_list'] = spectral_coh_list
-        self.processedData['sweep'+str(isweep)]['maxcoh_list'] = maxcoh_list
-        self.processedData['sweep'+str(isweep)]['maxspectralcoh_list'] = maxspectralcoh_list
-        
-
-    def get_raytracing_isweep(self, isweep, ifreq_list=None):
-        ###real frequencies of hop and ref
-        # freq_list_hop = self.processedData['sweep'+str(isweep)]['freq_list_hop']
-        # freq_list_ref = self.processedData['sweep'+str(isweep)]['freq_list_ref']
-        ### index of frequencies to be used
-        if ifreq_list is None:
-            # ifreq_list = self.processedData['sweep'+str(isweep)]['ifreq_list']
-            
-            freq_ref = self.params_ref.F
-            freq_hop = self.params_hop.F
-            nbfreq = len(freq_hop)
-            ifreq_list=np.linspace(0,nbfreq-1, nbfreq, dtype=int)
-            
-        # t_reduced_list_ref = self.processedData['sweep'+str(isweep)]['t_reduced_list_ref']
-        
-        # freq_list_hop = self.corrSigDic['freq_list_hop']
-        # t = self.corrSigDic['t']
-        # tinit = t[0]
-        # tfin = t[-1]
-        # interface = Beam3dInterface.from_shot('tcv', shot=self.shot, channelval=2, modex=1, twindow=[tinit, tfin], freq_choice=freq_list_hop)
-        
-        if self.numDemod:
-            output_ref, beam3d_interface_ref = _DBSbeam('tcv',shot=self.shot, isweep=isweep, xmode=self.xmode, channelval=3, ifreqs=ifreq_list, verbose=self.verbose, plot=self.plot, load_if_existing=True)
-            output_hop, beam3d_interface_hop = _DBSbeam('tcv',shot=self.shot, isweep=isweep, xmode=self.xmode, channelval=4, ifreqs=ifreq_list, verbose=self.verbose, plot=self.plot, load_if_existing=True)
-        else:
-            output_ref, beam3d_interface_ref = _DBSbeam('tcv',shot=self.shot, isweep=isweep, xmode=self.xmode, channelval=1, ifreqs=ifreq_list, verbose=self.verbose, plot=self.plot, load_if_existing=True)
-            output_hop, beam3d_interface_hop = _DBSbeam('tcv',shot=self.shot, isweep=isweep, xmode=self.xmode, channelval=2, ifreqs=ifreq_list, verbose=self.verbose, plot=self.plot, load_if_existing=True)
 
         # outp = interface.fetch_result()
 
@@ -327,10 +332,689 @@ class CorrelationAnalysis(TCVShot):
         self.processedData['sweep'+str(isweep)]['rho_list_ref'] = output_ref.rho
         self.processedData['sweep'+str(isweep)]['rho_list_hop'] = output_hop.rho
         
+        if retdata:
+            return output_ref.rho, output_hop.rho
     
+    
+    def get_delta(self, isweep, retdata=False):
+        '''
+        Get the delta between the two beams
+        '''
+        
+        if 'rho_list_ref' not in self.processedData['sweep'+str(isweep)]:
+                self.get_raytracing_isweep(isweep)
+                
+        nbfreq = len(self.processedData['sweep'+str(isweep)]['rho_list_ref'])
             
-    def plot_coherence_delta(self, isweep_list, ax_low_f=None, ax_high_f=None,  plot_spectral=True, plot_pearson=True,plot_rho=False, ylog=False, add_pt_zero=True, norm_rho_s=True, mode='full', retdata=False):
+        r_ref = np.zeros((nbfreq))
+        z_ref = np.zeros((nbfreq))
+        r_hop = np.zeros((nbfreq))
+        z_hop = np.zeros((nbfreq))
+        delta = np.zeros((nbfreq))
+        
+        for i in range(nbfreq):
+            if self.verbose:
+                print('get delta, ifreq: ', i)
+                print(self.processedData['sweep'+str(isweep)]['output_ref'])
+            r_ref[i] = self.processedData['sweep'+str(isweep)]['output_ref'].dif[i].x
+            z_ref[i] = self.processedData['sweep'+str(isweep)]['output_ref'].dif[i].z
 
+            r_hop[i] =self.processedData['sweep'+str(isweep)]['output_hop'].dif[i].x
+            z_hop[i] = self.processedData['sweep'+str(isweep)]['output_hop'].dif[i].z
+
+            if r_ref[i]-r_hop[i]>0:
+                delta[i] = -np.sqrt((r_ref[i]-r_hop[i])**2 + (z_ref[i]-z_hop[i])**2)
+            else:
+                delta[i] = np.sqrt((r_ref[i]-r_hop[i])**2 + (z_ref[i]-z_hop[i])**2)
+    
+        self.processedData['sweep'+str(isweep)]['delta'] = delta
+        
+        if retdata:
+            return delta
+    
+    
+    def get_rho_s_plateau(self, isweep, retdata=False):
+        '''
+        Get the normalization rho_s for each plateau in the sweep
+        '''
+        if 'delta' not in self.processedData['sweep'+str(isweep)]:
+            self.get_delta(isweep)
+        
+        nbfreq = len(self.processedData['sweep'+str(isweep)]['delta'])
+        r_ref = np.zeros((nbfreq))
+        z_ref = np.zeros((nbfreq))
+        
+        sweep_tinit  = self.params_ref.TDIFDOP + self.params_ref.t0seq[isweep-1]
+        length_sweep = self.params_ref.Period*1e-3
+        
+        for i in range(nbfreq):
+            r_ref[i] = self.processedData['sweep'+str(isweep)]['output_ref'].dif[i].x
+            z_ref[i] = self.processedData['sweep'+str(isweep)]['output_ref'].dif[i].z
+
+        
+        rho_s_plateaus = np.zeros((self.nb_plateaus))
+        for i in range(self.nb_plateaus):
+            r_ref_loc = r_ref[self.plateaus_indices[i][0]:self.plateaus_indices[i][1]+1]
+            z_ref_loc = z_ref[self.plateaus_indices[i][0]:self.plateaus_indices[i][1]+1]
+            rho_s_loc = self.get_rho_s_r_z(time_window=[sweep_tinit, sweep_tinit+length_sweep], r=np.mean(r_ref_loc),
+                                           z=np.mean(z_ref_loc), rho=np.mean(self.processedData['sweep'+str(isweep)]['rho_list_ref'][self.plateaus_indices[i][0]:self.plateaus_indices[i][1]+1]))
+            #put the rho_s in cm
+            rho_s_loc = rho_s_loc*100
+            rho_s_plateaus[i] = rho_s_loc
+            
+        self.processedData['sweep'+str(isweep)]['rho_s_plateaus'] = rho_s_plateaus
+        
+        if retdata:
+            return rho_s_plateaus
+    
+    
+    def get_correlation_isweep(self, isweep, nperseg=1024, noverlap=512, window=None, remove_mean=True,mode='amp', plot=False, retdata=False):
+        """
+        isweep : int, sweep number
+        """
+        
+        if self.verbose:
+            print('Performing correlation for sweep {}'.format(isweep))
+        
+        if 'z_list_hop' not in self.processedData['sweep'+str(isweep)]:
+            print(' --- getting normalized data for sweep {}'.format(isweep) + ' --- ')
+            self.get_normalized_data_isweep(isweep=isweep, dtsart=400.e-6, dtend=100.e-6)
+    
+
+        ifreq_list = np.arange(0, len(self.processedData['sweep'+str(isweep)]['freq_list_hop']))
+
+        # arrays to fill
+        corr_list = np.zeros((len(ifreq_list), nperseg), dtype=complex)
+        maxcorr_list = np.zeros((len(ifreq_list)))
+        
+        spectral_coh_list = np.zeros((len(ifreq_list), nperseg), dtype=complex)
+        raw_maxspectralcoh_list = np.zeros((len(ifreq_list)))
+        fit_maxspectralcoh_list = np.zeros((len(ifreq_list)))
+        err_fit_maxspectralcoh_list = np.zeros((len(ifreq_list)))
+        
+        scipy_corr_list = np.zeros((len(ifreq_list), nperseg), dtype=complex)
+        scipy_maxcorr_list = np.zeros((len(ifreq_list)))
+        
+        dt=self.processedData['sweep'+str(isweep)]['dt']
+        
+        if plot:
+            fig, axfullcoherence=plot_1d([], [], grid=True)
+        else:
+            axfullcoherence = None
+            
+        for i, ifreq in enumerate(ifreq_list):
+            zref_loc = self.processedData['sweep'+str(isweep)]['z_list_ref'][ifreq]
+            zhop_loc = self.processedData['sweep'+str(isweep)]['z_list_hop'][ifreq]
+
+            # for each zref and zhop we compute the full coherence analysis
+            dictFullCohAnalysis = full_coherence_analysis(zref_loc, zhop_loc, dt, nperseg=nperseg, noverlap=noverlap, window=window,
+                                                        remove_mean=remove_mean, mode=mode, plot=plot,ax=axfullcoherence, verbose=self.verbose)
+            
+            tcorr_loc = dictFullCohAnalysis['tcorr_spec']
+            corr_loc = dictFullCohAnalysis['corr']
+            fcsd_spectral = dictFullCohAnalysis['fcsd']
+            spectral_coh_loc = dictFullCohAnalysis['spectral_coh']
+            tcorr_scipy = dictFullCohAnalysis['tcorr_scipy']
+            corr_scipy = dictFullCohAnalysis['corr_scipy']
+            
+            maxcorr = dictFullCohAnalysis['max_corr']
+            raw_maxspectralcoh = dictFullCohAnalysis['max_raw_spectral_coh']
+            scipy_maxcorr = dictFullCohAnalysis['max_corr_scipy']
+            fit_maxspectralcoh = dictFullCohAnalysis['max_fit_spectral_coh']
+            err_fit_maxspectralcoh = dictFullCohAnalysis['err_max_fit_spectral_coh']
+
+            #We fill with full functions and with the max values
+            corr_list[i,:] = corr_loc
+            spectral_coh_list[i,:] = spectral_coh_loc
+            scipy_corr_list[i,:] = corr_scipy
+            
+            maxcorr_list[i] = maxcorr
+            scipy_maxcorr_list[i] = scipy_maxcorr
+            raw_maxspectralcoh_list[i] = raw_maxspectralcoh
+            fit_maxspectralcoh_list[i] = fit_maxspectralcoh
+            err_fit_maxspectralcoh_list[i] = err_fit_maxspectralcoh
+            
+        corr_list = np.array(np.real(corr_list))
+        maxcorr_list = np.array(maxcorr_list)
+        spectral_coh_list = np.array((spectral_coh_list))
+        raw_maxspectralcoh_list = np.array(raw_maxspectralcoh_list)
+        fit_maxspectralcoh_list = np.array(fit_maxspectralcoh_list)
+        err_fit_maxspectralcoh_list = np.array(err_fit_maxspectralcoh_list)
+        scipy_corr_list = np.array((scipy_corr_list))
+        scipy_maxcorr_list = np.array(scipy_maxcorr_list)
+        
+        #We save the results in the processedData dictionary   
+        self.processedData['sweep'+str(isweep)]['tcorr'] = tcorr_loc
+        self.processedData['sweep'+str(isweep)]['corr_list'] = corr_list
+        self.processedData['sweep'+str(isweep)]['maxcorr_list'] = maxcorr_list
+        
+        self.processedData['sweep'+str(isweep)]['fcsd_spectral'] = fcsd_spectral
+        self.processedData['sweep'+str(isweep)]['spectral_coh_list'] = spectral_coh_list
+        self.processedData['sweep'+str(isweep)]['raw_maxspectralcoh_list'] = raw_maxspectralcoh_list
+        self.processedData['sweep'+str(isweep)]['fit_maxspectralcoh_list'] = fit_maxspectralcoh_list
+        self.processedData['sweep'+str(isweep)]['err_fit_maxspectralcoh_list'] = err_fit_maxspectralcoh_list
+        
+        self.processedData['sweep'+str(isweep)]['scipy_corr_list'] = scipy_corr_list
+        self.processedData['sweep'+str(isweep)]['scipy_maxcorr_list'] = scipy_maxcorr_list
+        
+        if retdata:
+            return tcorr_loc, corr_list, maxcorr_list, fcsd_spectral, spectral_coh_list, raw_maxspectralcoh_list, fit_maxspectralcoh_list, err_fit_maxspectralcoh_list, scipy_corr_list, scipy_maxcorr_list
+
+    def get_velocity_isweep(self, isweep, retdata=False):
+        '''
+            Get the velocity for a given sweep and save it in processedData
+        '''
+        velocity_prof = get_velocity_prof_object(self.shot, isweep_list = [isweep])
+        self.processedData['sweep'+str(isweep)]['velocity_prof'] = velocity_prof
+        if retdata:
+            return velocity_prof
+
+
+
+    ### ======================================================================================== ###
+    
+    def prepare_coherence_for_plot(self, isweep, add_pt_zero=True, x_norm='rho_s', mode='amp',  load_if_existing=False, retdata=False):
+        """
+        Prepare the coherence for a given sweep 
+        
+        x_norm : str, 
+            - 'rho_s': delta given in rho_s units
+            - 'rho_hop' : position of hop channel
+            - 'cm': delta in cm
+        
+        mode: str,
+            - 'amp' : amplitude
+            - 'phase' : phase
+            - 'full' : full signal    
+
+        """
+        
+        nb_plateaus = self.nb_plateaus
+        plateau_list = np.arange(nb_plateaus)
+
+        ### if data not loaded for the sweep we load them
+        if load_if_existing is False or 'maxcoh_list' not in self.processedData['sweep'+str(isweep)]:
+            print(' --- getting coherence data for sweep {}'.format(isweep) + ' --- ')
+            self.get_correlation_isweep(isweep, nperseg=1024, noverlap=512, window=None, remove_mean=True,mode=mode, plot=False, retdata=False)
+        ### delta is computed depending on the chosen normalization
+        if load_if_existing is False or 'delta' not in self.processedData['sweep'+str(isweep)]:
+            self.get_delta(isweep)
+        if load_if_existing is False or 'rho_s_plateaus' not in self.processedData['sweep'+str(isweep)]:
+            self.get_rho_s_plateau(isweep)
+        
+
+        rho_list_hop = self.processedData['sweep'+str(isweep)]['rho_list_hop']
+        
+        if x_norm == 'rho_hop':
+            delta = rho_list_hop
+        else:
+            delta = self.processedData['sweep'+str(isweep)]['delta']
+        
+        rho_s_plateaus = self.processedData['sweep'+str(isweep)]['rho_s_plateaus']
+
+        self.processedData['sweep'+str(isweep)]['prepData'] = dict()
+        self.processedData['sweep'+str(isweep)]['prepData']['nb_plateaus'] = nb_plateaus
+        self.processedData['sweep'+str(isweep)]['prepData']['plateau_list'] = plateau_list
+        
+        for i, plat in enumerate(plateau_list):
+            
+            #Step 0: choose the plateau
+            plat_indices = self.plateaus_indices[plat]
+            
+            #Step 1: load delta for a given plateau
+            delta_loc = delta[plat_indices[0]:plat_indices[1]+1]
+            rho_loc = np.mean(self.processedData['sweep'+str(isweep)]['rho_list_ref'][plat_indices[0]:plat_indices[1]+1])
+            rho_s_loc = rho_s_plateaus[plat]
+            
+            rho_hop_loc = rho_list_hop[plat_indices[0]:plat_indices[1]+1]
+            rho_hop_err_plus = np.max(rho_hop_loc) - rho_loc
+            rho_hop_err_minus = rho_loc - np.min(rho_hop_loc)
+            #Step 2: if normalization by rho_s
+            if x_norm=='rho_s':
+                delta_loc = delta_loc/rho_s_loc
+            
+            
+            #Step 3: load arrays for the given plateau
+            maxcorr_list         = self.processedData['sweep'+str(isweep)]['maxcorr_list'][plat_indices[0]:plat_indices[1]+1]
+            raw_maxspectralcoh_list = self.processedData['sweep'+str(isweep)]['raw_maxspectralcoh_list'][plat_indices[0]:plat_indices[1]+1]
+            fit_maxspectralcoh_list = self.processedData['sweep'+str(isweep)]['fit_maxspectralcoh_list'][plat_indices[0]:plat_indices[1]+1]
+            err_fit_maxspectralcoh_list = self.processedData['sweep'+str(isweep)]['err_fit_maxspectralcoh_list'][plat_indices[0]:plat_indices[1]+1]
+            
+            #Step 4: add the point zero
+            if add_pt_zero:
+                if x_norm == 'rho_hop':
+                    delta_loc = np.concatenate(([rho_loc], delta_loc))
+                    maxcorr_list = np.concatenate(([1], maxcorr_list))
+                    raw_maxspectralcoh_list = np.concatenate(([1], raw_maxspectralcoh_list))
+                    fit_maxspectralcoh_list = np.concatenate(([1], fit_maxspectralcoh_list))
+                    err_fit_maxspectralcoh_list = np.concatenate(([0], err_fit_maxspectralcoh_list))
+                else:
+                    delta_loc = np.concatenate(([0], delta_loc))
+                    maxcorr_list = np.concatenate(([1], maxcorr_list))
+                    raw_maxspectralcoh_list = np.concatenate(([1], raw_maxspectralcoh_list))
+                    fit_maxspectralcoh_list = np.concatenate(([1], fit_maxspectralcoh_list))
+                    err_fit_maxspectralcoh_list = np.concatenate(([0], err_fit_maxspectralcoh_list))
+                    
+                #sorting the arrays along the delta components
+                inds = delta_loc.argsort()
+                delta_loc = delta_loc[inds]
+                maxcorr_list = maxcorr_list[inds]
+                raw_maxspectralcoh_list = raw_maxspectralcoh_list[inds]
+                fit_maxspectralcoh_list = fit_maxspectralcoh_list[inds]
+                err_fit_maxspectralcoh_list = err_fit_maxspectralcoh_list[inds]
+            
+            self.processedData['sweep'+str(isweep)]['prepData']['plateau'+str(plat)] = {'rho_loc':rho_loc, 'rho_s_loc':rho_s_loc, 'delta':delta_loc,
+                                                                                        'rho_hop_err_plus':rho_hop_err_plus, 'rho_hop_err_minus':rho_hop_err_minus,
+                                                                                        'maxcorr':maxcorr_list, 'raw_maxspectralcoh':raw_maxspectralcoh_list,
+                                                                                        'fit_maxspectralcoh':fit_maxspectralcoh_list, 'err_fit_maxspectralcoh_list':err_fit_maxspectralcoh_list}
+            
+
+        if retdata:
+            return self.processedData['sweep'+str(isweep)]['prepData']
+    
+
+    
+    def plot_coherence_delta_isweep(self, isweep, plateau_list=None, ax=None, plot_fit_spec = True, plot_raw_spec=False, plot_corr=False, ylog=True, caption=True, add_pt_zero=True, x_norm='rho_s', mode='amp', load_if_existing=False, retdata=False, **kwargs):
+        
+        
+        prepData=self.prepare_coherence_for_plot(isweep, add_pt_zero=add_pt_zero, x_norm=x_norm, mode=mode, load_if_existing=load_if_existing, retdata=True)
+       
+        nb_plateaus = prepData['nb_plateaus']
+        plateau_list = prepData['plateau_list']
+        if ax is None:
+            create_ax = True
+        else:
+            create_ax = False
+        default_colors = plt.cm.Dark2(np.linspace(0,1,len(plateau_list)+2))
+        for i, plat in enumerate(plateau_list):
+
+                rho_loc            = prepData['plateau'+str(plat)]['rho_loc']
+                rho_s_loc          = prepData['plateau'+str(plat)]['rho_s_loc']
+                delta_loc          = prepData['plateau'+str(plat)]['delta']
+                maxcorr            = prepData['plateau'+str(plat)]['maxcorr']
+                raw_maxspectralcoh = prepData['plateau'+str(plat)]['raw_maxspectralcoh']
+                fit_maxspectralcoh = prepData['plateau'+str(plat)]['fit_maxspectralcoh']
+                err_fit_maxspectralcoh = prepData['plateau'+str(plat)]['err_fit_maxspectralcoh_list']
+                if create_ax:
+                    fig, ax = plot_1d([], [], grid=True)
+                    
+                default_kwargs_fit_spec = {'label':'fit spec','marker':'o', 'color':default_colors[i]}
+                default_kwargs_raw_spec = {'label':'raw spec','marker':'^', 'color':default_colors[i]}
+                default_kwargs_corr = {'label':'corr','marker':'s', 'color':default_colors[i]}
+                default_kwargs_fit_spec.update(kwargs)
+                default_kwargs_raw_spec.update(kwargs)
+                default_kwargs_corr.update(kwargs)
+                
+                if plot_fit_spec:
+                    ax.errorbar(delta_loc, fit_maxspectralcoh,err_fit_maxspectralcoh, **default_kwargs_fit_spec)
+                
+                if plot_raw_spec:
+                    ax.plot(delta_loc, raw_maxspectralcoh, linestyle='-.',  **default_kwargs_raw_spec)
+                    
+                if plot_corr:
+                    ax.plot(delta_loc, maxcorr, fillstyle='none', linestyle='--', **default_kwargs_corr)
+                    
+                if caption:
+                    ax.set_title(r' #{} sweep {} $\rho_\psi$ = {:.2f}'.format(self.shot, isweep, rho_loc))
+                    my_legend(ax, loc='upper left')
+                    my_text(ax, 0.8,0.2, r'$\rho_s$ = {:.1f} mm'.format(rho_s_loc*10))
+                    ax.set_ylabel('correlation')
+                    ax.set_ylim(0.1,1.1)
+                    
+                    if x_norm == 'rho_hop':
+                        ax.set_xlabel(r'$\rho_{hop}$')
+                        ax.axhline(1, color='black', linestyle='--')
+                        ax.axvline(rho_loc, color='black', linestyle='--')
+                    elif x_norm == 'delta':
+                        ax.set_xlabel(r'$\Delta$ [cm]')
+                        ax.axhline(1, color='black', linestyle='--')
+                        ax.axvline(0, color='black', linestyle='--')
+                    elif x_norm == 'rho_s':
+                        ax.set_xlabel(r'$\Delta/\rho_s$')
+                        ax.axhline(1, color='black', linestyle='--')
+                        ax.axvline(0, color='black', linestyle='--')
+                
+                if ylog:
+                    ax.set_yscale('log')
+
+    
+      
+    
+    def plot_velocity_isweep(self, isweep, plateau_list=None, ax=None, several_axes=False, x_norm='rho_hop', load_if_existing=True,caption=True, retdata=False, **kwargs):
+        ''' plot the velocity for a given sweep and plateaus
+            different options for x scale: 
+                - rho hopping 
+                - delta (cm)
+                - delta (rho_s)
+        '''
+
+        if plateau_list is None:
+            plateau_list = np.arange(self.nb_plateaus)
+
+    
+
+        default_colors = plt.cm.Dark2(np.linspace(0,1,len(plateau_list)+2))
+            
+        ### if data not loaded for the sweep we load them
+        if load_if_existing is False or 'velocity_prof' not in self.processedData['sweep'+str(isweep)]:
+            print(' --- getting velocity data for sweep {}'.format(isweep) + ' --- ')
+            self.get_velocity_isweep(isweep)
+        ### delta is computed depending on the chosen normalization
+        if load_if_existing is False or 'delta' not in self.processedData['sweep'+str(isweep)]:
+            self.get_delta(isweep)
+        if load_if_existing is False or 'rho_s_plateaus' not in self.processedData['sweep'+str(isweep)]:
+            self.get_rho_s_plateau(isweep)
+        
+        if x_norm == 'rho_hop':
+            delta = self.processedData['sweep'+str(isweep)]['rho_list_hop']
+        else:
+            delta = self.processedData['sweep'+str(isweep)]['delta']
+        
+        rho_s_plateaus = self.processedData['sweep'+str(isweep)]['rho_s_plateaus']
+        
+        for i, plat in enumerate(plateau_list):
+            
+            #Step 0: choose the plateau
+            plat_indices = self.plateaus_indices[plat]
+            
+            #Step 1: load delta for a given plateau
+            delta_loc = delta[plat_indices[0]:plat_indices[1]+1]
+            rho_loc = np.mean(self.processedData['sweep'+str(isweep)]['rho_list_ref'][plat_indices[0]:plat_indices[1]+1])
+            rho_s_loc = rho_s_plateaus[plat]
+            #Step 2: if normalization by rho_s
+            if x_norm=='rho_s':
+                delta_loc = delta_loc/rho_s_loc
+
+        
+            #Step 3: load arrays for the given plateau
+            v_perp_loc = self.processedData['sweep'+str(isweep)]['velocity_prof'].v_perp.values[plat_indices[0]:plat_indices[1]+1]
+            dv_perp_loc = self.processedData['sweep'+str(isweep)]['velocity_prof'].dv_perp[plat_indices[0]:plat_indices[1]+1]
+            dv_perp_up_loc = self.processedData['sweep'+str(isweep)]['velocity_prof'].dv_perp_up[plat_indices[0]:plat_indices[1]+1]
+            dv_perp_low_loc = self.processedData['sweep'+str(isweep)]['velocity_prof'].dv_perp_low[plat_indices[0]:plat_indices[1]+1]
+            
+            err = np.zeros((2, len(v_perp_loc)))
+            err[1] = dv_perp_up_loc
+            err[0] = dv_perp_low_loc
+           
+                
+            #Step 5: plot the arrays
+            if i==0 and ax is None:
+                fig, ax = plot_1d([], [], grid=True)
+            elif i>0 and several_axes:
+                fig, ax = plot_1d([], [], grid=True)
+                
+            
+            default_kwargs = {'marker':markers[i], 'color':default_colors[i]}
+            default_kwargs.update(kwargs)
+            
+            ax.errorbar(delta_loc, v_perp_loc, err, **default_kwargs)
+            
+            if caption:
+                ax.set_title(r' #{} sweep {} $\rho_\psi$ = {:.2f}'.format(self.shot, isweep, rho_loc))
+                ax.set_ylabel(r'$v_\perp$ [m/s]')
+                if x_norm == 'rho_hop':
+                    ax.set_xlabel(r'$\rho_{hop}$')
+                    ax.axvline(rho_loc, color='black', linestyle='--')
+                elif x_norm == 'delta':
+                    ax.set_xlabel(r'$\Delta$ [cm]')
+                    ax.axvline(0, color='black', linestyle='--')
+                elif x_norm == 'rho_s':
+                    ax.set_xlabel(r'$\Delta/\rho_s$')
+                    ax.axvline(0, color='black', linestyle='--')
+
+            plt.tight_layout()
+    
+    
+
+    def plot_correlation_velocity(self, isweep_list, plateau_list=None, mode='amp', x_norm='rho_hop', load_if_existing=True, retdata=False):
+        '''
+        Will create double figures: up the correlation and down the velocity
+        '''
+
+        if plateau_list is None:
+            plateau_list = np.arange(self.nb_plateaus)
+            
+        colors = plt.cm.Dark2(np.linspace(0,1,len(isweep_list)+2))
+        
+        for i in range(len(plateau_list)):
+            fig, axs = prep_multiple_subplots(2,1, axgrid=[0,1],figsize=(10,8), sharex=True)
+            rho_list = []
+            rho_s_list = []
+            for j in range(len(isweep_list)):
+
+                isweep_loc = isweep_list[j]
+                
+                if 'delta' not in self.processedData['sweep'+str(isweep_loc)]:
+                    self.get_delta(isweep_loc)
+                if 'rho_s_plateaus' not in self.processedData['sweep'+str(isweep_loc)]:
+                    self.get_rho_s_plateau(isweep_loc)
+                
+                rho_loc = np.mean(self.processedData['sweep'+str(isweep_loc)]['rho_list_ref'][self.plateaus_indices[plateau_list[i]][0]:self.plateaus_indices[plateau_list[i]][1]+1])
+                rho_s_loc = self.processedData['sweep'+str(isweep_loc)]['rho_s_plateaus'][plateau_list[i]]
+                
+                self.plot_coherence_delta_isweep(isweep_loc, plateau_list=[plateau_list[i]], ax = axs[0], plot_fit_spec = True, plot_raw_spec=False, plot_corr=False,
+                                            ylog=True, add_pt_zero=True, x_norm=x_norm, mode=mode, load_if_existing=load_if_existing, caption=False,
+                                            color=colors[j], marker=markers[j], linestyle='', label=r'isweep = {} ; $\rho$ = {:.2f} ; $\rho_s$ = {:.1f} mm'.format(isweep_loc, rho_loc, rho_s_loc*10))
+                self.plot_velocity_isweep(isweep_loc, plateau_list=[plateau_list[i]], ax=axs[1], x_norm=x_norm,
+                                          load_if_existing=load_if_existing, caption=False, color=colors[j], marker=markers[j], linestyle='')    
+        
+        
+                rho_list.append(rho_loc)
+                rho_s_list.append(rho_s_loc)
+                                        
+            axs[0].set_title(r'#{}'.format(self.shot))
+        
+            axs[0].set_ylabel('correlation')
+            axs[0].set_ylim(0.1,1.1)
+            axs[1].set_ylabel(r'$v_\perp$ [m/s]')
+            if x_norm == 'rho_hop':
+                axs[1].set_xlabel(r'$\rho_{hop}$')
+            elif x_norm == 'delta':
+                axs[1].set_xlabel(r'$\Delta$ [cm]')
+            elif x_norm == 'rho_s':
+                axs[1].set_xlabel(r'$\Delta/\rho_s$')
+        
+        
+            # text_str = '\n'.join([r'$\rho_s=$' + f'{val*10:.1f}' for val in rho_s_list])
+            # my_text(axs[0], 0.8,0.2, text_str)
+            
+            my_legend(axs[0], fontsize='12')
+            
+            plt.tight_layout()
+
+
+   
+    ### ================================== ###
+    ### diagnostics using specific freqs ###
+    ### ================================== ###        
+    def get_correlation_isweep_plateau(self, isweep, ifreq_list=None, plateau=None, nperseg=1024, noverlap=512, window=None, remove_mean=True,mode='amp', plot=False, ret=False):
+        """
+        isweep : int, sweep number
+        ifreq_list : list of int, list of frequencies to be used 
+        plateau: int, which frequency plateau to use
+        """
+        
+        if self.verbose:
+            print('Performing correlation for sweep {}'.format(isweep))
+        
+        if 'z_list_hop' not in self.processedData['sweep'+str(isweep)]:
+            print(' --- getting normalized data for sweep {}'.format(isweep) + ' --- ')
+            self.get_normalized_data_isweep(isweep=isweep, dtsart=400.e-6, dtend=100.e-6)
+    
+        #If no direct list of frequencies is given
+        if ifreq_list is None:
+            #We look if a plateau has been given
+            if plateau is not None:
+                ifreq_list = np.arange(self.processedData['sweep'+str(isweep)]['plateaus_indices'][plateau][0], self.processedData['sweep'+str(isweep)]['plateaus_indices'][plateau][1]+1)
+                if self.verbose:
+                    print(' --- using plateau {} : {} --- '.format(plateau, ifreq_list))
+            #if both are none, then we use the full list
+            else:
+                ifreq_list = np.arange(0, len(self.processedData['sweep'+str(isweep)]['freq_list_hop']))
+        else:
+            if self.verbose:
+                print(' --- using ifreq_list : {} --- '.format(ifreq_list))
+            ifreq_list = np.array(ifreq_list)
+
+        coh_list = np.zeros((len(ifreq_list), nperseg), dtype=complex)
+        spectral_coh_list = np.zeros((len(ifreq_list), nperseg), dtype=complex)
+        maxcoh_list = np.zeros((len(ifreq_list)), dtype=complex)
+        maxspectralcoh_list = np.zeros((len(ifreq_list)), dtype=complex)
+        
+        dt=self.processedData['sweep'+str(isweep)]['dt']
+        
+        if plot:
+            fig, axfullcoherence=plot_1d([], [], grid=True)
+        else:
+            axfullcoherence = None
+            
+        for i, ifreq in enumerate(ifreq_list):
+            zref_loc = self.processedData['sweep'+str(isweep)]['z_list_ref'][ifreq]
+            zhop_loc = self.processedData['sweep'+str(isweep)]['z_list_hop'][ifreq]
+
+            tcorr_loc, coh_loc, fcsd_spectral, spectral_coh_loc = full_coherence_analysis(zref_loc, zhop_loc, dt, nperseg=nperseg, noverlap=noverlap, window=window,
+                                                                                          remove_mean=remove_mean, mode=mode, plot=plot,ax=axfullcoherence, verbose=self.verbose)
+            maxcoh = np.max(abs(coh_loc))
+            maxspectralcoh = np.max(spectral_coh_loc)
+
+            coh_list[i,:] = coh_loc
+            spectral_coh_list[i,:] = spectral_coh_loc
+            maxcoh_list[i] = maxcoh
+            maxspectralcoh_list[i] = maxspectralcoh
+            
+            coh_list = np.array(np.real(coh_list))
+            spectral_coh_list = np.array((spectral_coh_list))
+            
+            
+        self.processedData['sweep'+str(isweep)]['tcorr'] = tcorr_loc
+        self.processedData['sweep'+str(isweep)]['fcsd_spectral'] = fcsd_spectral
+        self.processedData['sweep'+str(isweep)]['coh_list'] = coh_list
+        self.processedData['sweep'+str(isweep)]['spectral_coh_list'] = spectral_coh_list
+        self.processedData['sweep'+str(isweep)]['maxcoh_list'] = maxcoh_list
+        self.processedData['sweep'+str(isweep)]['maxspectralcoh_list'] = maxspectralcoh_list
+        
+        if ret:
+            return tcorr_loc, coh_list, fcsd_spectral, spectral_coh_list, maxcoh_list, maxspectralcoh_list
+
+
+    def plot_coherence_delta_isweep2(self, isweep, plateau_list=None, ax=None, plot_spectral=True, plot_pearson=False, ylog=True, caption=True, add_pt_zero=True, x_norm='rho_s', mode='amp', load_if_existing=False, retdata=False, **kwargs):
+        """
+        Plot the coherence for a given sweep 
+        Inside this sweep you can choose to plot only a plateau 
+        
+        x_norm : str, 
+            - 'rho_s': delta given in rho_s units
+            - 'rho_hop' : position of hop channel
+            - 'cm': delta in cm
+        """
+        
+        nb_plateaus = self.nb_plateaus
+        if plateau_list is None:
+            plateau_list = np.arange(nb_plateaus)
+
+
+        if ax is None:
+            create_ax = True
+        else:
+            create_ax = False
+            
+        default_colors = plt.cm.Dark2(np.linspace(0,1,len(plateau_list)+2))
+            
+        ### if data not loaded for the sweep we load them
+        if load_if_existing is False or 'maxcoh_list' not in self.processedData['sweep'+str(isweep)]:
+            print(' --- getting coherence data for sweep {}'.format(isweep) + ' --- ')
+            self.get_correlation_isweep(isweep, nperseg=1024, noverlap=512, window=None, remove_mean=True,mode=mode, plot=False, retdata=False)
+        ### delta is computed depending on the chosen normalization
+        if load_if_existing is False or 'delta' not in self.processedData['sweep'+str(isweep)]:
+            self.get_delta(isweep)
+        if load_if_existing is False or 'rho_s_plateaus' not in self.processedData['sweep'+str(isweep)]:
+            self.get_rho_s_plateau(isweep)
+        
+        if x_norm == 'rho_hop':
+            delta = self.processedData['sweep'+str(isweep)]['rho_list_hop']
+        else:
+            delta = self.processedData['sweep'+str(isweep)]['delta']
+        
+        rho_s_plateaus = self.processedData['sweep'+str(isweep)]['rho_s_plateaus']
+        
+        for i, plat in enumerate(plateau_list):
+            
+            #Step 0: choose the plateau
+            plat_indices = self.plateaus_indices[plat]
+            
+            #Step 1: load delta for a given plateau
+            delta_loc = delta[plat_indices[0]:plat_indices[1]+1]
+            rho_loc = np.mean(self.processedData['sweep'+str(isweep)]['rho_list_ref'][plat_indices[0]:plat_indices[1]+1])
+            rho_s_loc = rho_s_plateaus[plat]
+            #Step 2: if normalization by rho_s
+            if x_norm=='rho_s':
+                delta_loc = delta_loc/rho_s_loc
+           
+           
+            #Step 3: load arrays for the given plateau
+            maxcoh_list         = self.processedData['sweep'+str(isweep)]['maxcoh_list'][plat_indices[0]:plat_indices[1]+1]
+            maxspectralcoh_list = self.processedData['sweep'+str(isweep)]['maxspectralcoh_list'][plat_indices[0]:plat_indices[1]+1]
+            
+            #Step 4: add the point zero
+            if add_pt_zero:
+                if x_norm == 'rho_hop':
+                    delta_loc = np.concatenate(([rho_loc], delta_loc))
+                    maxcoh_list = np.concatenate(([1], maxcoh_list))
+                    maxspectralcoh_list = np.concatenate(([1], maxspectralcoh_list))
+                else:
+                    delta_loc = np.concatenate(([0], delta_loc))
+                    maxcoh_list = np.concatenate(([1], maxcoh_list))
+                    maxspectralcoh_list = np.concatenate(([1], maxspectralcoh_list))
+                
+                #sorting the arrays along the delta components
+                inds = delta_loc.argsort()
+                delta_loc = delta_loc[inds]
+                maxcoh_list = maxcoh_list[inds]
+                maxspectralcoh_list = maxspectralcoh_list[inds]
+                
+            #Step 5: plot the arrays
+            if create_ax:
+                fig, ax = plot_1d([], [], grid=True)
+                
+            default_kwargs_spec = {'label':'spectral','marker':'o', 'color':default_colors[i]}
+            default_kwargs_pear = {'label':'pearson','marker':'o', 'color':default_colors[i]}
+            default_kwargs_spec.update(kwargs)
+            default_kwargs_pear.update(kwargs)
+                
+            if plot_spectral:
+                ax.plot(delta_loc, maxspectralcoh_list,  **default_kwargs_spec)
+            if plot_pearson:
+                ax.plot(delta_loc, maxcoh_list, fillstyle='none', linestyle='--', **default_kwargs_pear)
+           
+            if caption:
+                ax.set_title(r' #{} sweep {} $\rho_\psi$ = {:.2f}'.format(self.shot, isweep, rho_loc))
+                my_legend(ax, loc='upper left')
+                my_text(ax, 0.8,0.2, r'$\rho_s$ = {:.1f} mm'.format(rho_s_loc*10))
+                ax.set_ylabel('correlation')
+                ax.set_ylim(0.1,1.1)
+                
+                if x_norm == 'rho_hop':
+                    ax.set_xlabel(r'$\rho_{hop}$')
+                    ax.axhline(1, color='black', linestyle='--')
+                    ax.axvline(rho_loc, color='black', linestyle='--')
+                elif x_norm == 'delta':
+                    ax.set_xlabel(r'$\Delta$ [cm]')
+                    ax.axhline(1, color='black', linestyle='--')
+                    ax.axvline(0, color='black', linestyle='--')
+                elif x_norm == 'rho_s':
+                    ax.set_xlabel(r'$\Delta/\rho_s$')
+                    ax.axhline(1, color='black', linestyle='--')
+                    ax.axvline(0, color='black', linestyle='--')
+                
+            if ylog:
+                ax.set_yscale('log')
+
+
+ 
+    def deprecated_plot_coherence_delta(self, isweep_list, ax_low_f=None, ax_high_f=None,  plot_spectral=True, plot_pearson=True,plot_rho=False, ylog=False, add_pt_zero=True, norm_rho_s=True, mode='full', retdata=False):
+        
+        print(' Careful this function is deprecated, use plot_coherence_delta_isweep instead')
+        
         if ax_low_f is None:
             fig, ax_low_f = plot_1d([],[], grid=True)
         if ax_high_f is None: 
@@ -575,135 +1259,153 @@ class CorrelationAnalysis(TCVShot):
         return ax_low_f, ax_high_f
     
     
+
+
+
+def plot_correlation_slopes(xdata, ydata, rho_s=None, rho_loc = None, ind_turb=None, ind_aval=None, ind_turb_pos=None, exclude_aval=None, caption=True, xunit='rho_s', ax=None, ylog=True, retdata=False, **kwargs):
+    '''
+    Assumes that xdata is given in delta/rho_s
     
-    def plot_heating_with_sweeps(self, list_isweep, **kwargs):
+    xunit: 'rho_s' or 'cm'
+    '''
+    
+    default_kwargs = {'label':'spectral','marker':'o', 'color':'teal', 'linestyle':''}
+    default_kwargs.update(kwargs)
+    
+    if xunit=='cm':
+        xdata = xdata*rho_s
         
-        if 'markevery' not in kwargs:
-            kwargs['markevery'] = 20
+    if ax is None:
+        fig, ax = plot_1d([], [], grid=True)
+    
+    ax.plot(xdata, (ydata), **default_kwargs)
+    
+    if caption:
+        if rho_s is not None:
+            my_text(ax, 0.15, 0.87, r'$\rho_s$ = {:.2f} mm'.format(rho_s*10), fontsize=12, color='k')
+        if rho_loc is not None:
+            my_text(ax, 0.35, 0.87, r'$\rho$ = {:.2f}'.format(rho_loc), fontsize=12, color='k')
+       
+
+    if ind_turb is not None:
+        ind_turb_min=ind_turb[0]    
+        ind_turb_max=ind_turb[1]
+        popt, perr, rsquared = my_linearRegression(xdata[ind_turb_min:ind_turb_max], np.log(ydata[ind_turb_min:ind_turb_max]), mode='affine')
+        ax.plot(xdata[ind_turb_min:ind_turb_max], np.exp(popt[0]*xdata[ind_turb_min:ind_turb_max]+ popt[1]), 'r', marker='')
+        lc = 1/popt[0]
+        lcerr = perr[0]/popt[0]**2
+        print('Lc = {:.2f} +/- {:.2f} ; R² = {:.2f}'.format(lc, lcerr, rsquared))
         
-        ax = self.plot_heating(**kwargs)
+        if caption:
+            if xunit=='rho_s':
+                my_text(ax, 0.8, 0.4, r'$l_c \approx$ {:.2f} +/- {:.2f} $\rho_s$'.format(lc, lcerr), fontsize=12, color='r')
+            elif xunit=='cm':
+                my_text(ax, 0.8, 0.4, r'$l_c \approx$ {:.2f} +/- {:.2f} $\cm$'.format(lc, lcerr), fontsize=12, color='r')
         
-        #Nb sweep and associated times
-        sweep_tinit = self.params_ref.TDIFDOP + self.params_ref.t0seq
-        nbsweep = len(sweep_tinit)
-        self.nbsweep=nbsweep
-        period = self.params_ref.Period
-        bbox=dict(facecolor = 'white', edgecolor='black', pad=10.0)
-        for i in range(nbsweep):
-            if i+1 in list_isweep:
-                ax.axvline(sweep_tinit[i], color='black')
-                ax.axvline(sweep_tinit[i]+period*1e-3, color='black')
-                # my_text(ax, sweep_tinit[i], 0.2, '{}'.format(i+1), color='black')
-                ax.text(sweep_tinit[i]+0.1,
-                        100,
-                        '{}'.format(i+1), 
-                        horizontalalignment='center',
-                        verticalalignment='center',
-                        bbox=bbox,
-                        color='black')
-           
-           
-           
+    else:
+        lc = None
+        lcerr = None
+            
+        
+    if ind_aval is not None:
+        ind_aval_min=ind_aval[0]
+        ind_aval_max=ind_aval[1]
+        if exclude_aval is not None:
+            ### remove the point exclude
+            xdata_excluded = np.delete(xdata[ind_aval_min:ind_aval_max], exclude_aval)
+            ydata_excluded = np.delete(ydata[ind_aval_min:ind_aval_max], exclude_aval)
+            popt, perr, rsquared = my_linearRegression(xdata_excluded, np.log(ydata_excluded), mode='affine')
+            ax.scatter(xdata[ind_aval_min:ind_aval_max][exclude_aval], ydata[ind_aval_min:ind_aval_max][exclude_aval], color='red', marker='x', s=120)
+        else:     
+            popt, perr, rsquared = my_linearRegression(xdata[ind_aval_min:ind_aval_max], np.log(ydata[ind_aval_min:ind_aval_max]), mode='affine')
+        ax.plot(xdata[ind_aval_min:ind_aval_max], np.exp(popt[0]*xdata[ind_aval_min:ind_aval_max] + popt[1]), 'g', marker='')
+        laval = 1/popt[0]
+        lavalerr = perr[0]/popt[0]**2
+        Caval = ydata[ind_aval_max]
+        print('La = {:.2f} +/- {:.2f} ; R² = {:.2f} ; Caval = {:.2f}'.format(laval, lavalerr, rsquared, Caval))
+        Cavalerr = 0.1
+        if caption:
+            if xunit=='rho_s':
+                my_text(ax, 0.8,0.25, r'$L_a \approx$ {:.2f} +/- {:.2f} $\rho_s$'.format(laval, lavalerr), fontsize=12, color='g')
+            elif xunit=='cm':
+                my_text(ax, 0.8,0.25, r'$L_a \approx$ {:.2f} +/- {:.2f} cm'.format(laval, lavalerr), fontsize=12, color='g')
+            
+    else:
+        laval = None
+        lavalerr = None
+        Caval = None
+        Cavalerr = None
+
+    if ind_turb_pos is not None:
+        ind_turb_min=ind_turb_pos[0]
+        ind_turb_max=ind_turb_pos[1]
+        popt, perr, rsquared = my_linearRegression(xdata[ind_turb_min:ind_turb_max], np.log(ydata[ind_turb_min:ind_turb_max]), mode='affine')
+        ax.plot(xdata[ind_turb_min:ind_turb_max], np.exp(popt[0]*xdata[ind_turb_min:ind_turb_max]+ popt[1]), 'b', marker='')
+        lcplus = abs(1/popt[0])
+        lcpluserr = perr[0]/popt[0]**2
+        print('Lc+ = {:.2f} +/- {:.2f} ; R² = {:.2f}'.format(lcplus, lcpluserr, rsquared))
+        
+        if caption:
+            if xunit=='rho_s':
+                my_text(ax, 0.8,0.1, r'$L_c \approx$ {:.2f} +/- {:.2f} $\rho_s$'.format(lcplus, lcpluserr), fontsize=12, color='b')
+            elif xunit=='cm':
+                my_text(ax, 0.8,0.1, r'$L_c \approx$ {:.2f} +/- {:.2f} cm'.format(lcplus, lcpluserr), fontsize=12, color='b')
+    else:
+        lcplus = None
+        lcpluserr = None            
+            
+
+    if ylog:
+        plt.yscale('log')
+    
+    plt.ylim(0.07,1.1)
+    plt.ylabel('correlation')
+    plt.axhline(1, color='black', linestyle='--')
+    plt.axvline(0, color='black', linestyle='--')
+    
+    if xunit=='rho_s':
+        plt.xlabel(r'$\Delta$ $[\rho_s]$')
+    elif xunit=='cm':
+        plt.xlabel(r'$\Delta$ $[cm]$')
+    
+    if retdata:
+        data=dict()
+        data['lc'] = lc
+        data['lcerr'] = lcerr
+        data['laval'] = laval
+        data['lavalerr'] = lavalerr
+        data['lcplus'] = lcplus
+        data['lcpluserr'] = lcpluserr
+        data['Caval'] = Caval
+        data['Cavalerr'] = Cavalerr
+        return ax, data
+    
+
+
+
+
+
+
+
+
 # if __name__ == '__main__':
-#     a=CorrelationAnalysis(79797)
-#     isweep_list=[3,4,5,6,7,8]
-#     ifreq_list=np.linspace(20,39,20)
-#     fig, ax = plot_1d([],[])
-#     for i,sweeploc in enumerate(isweep_list):
-#         a.wrapper_coherence_analysis(sweeploc, ifreq_list)
-#         ax.plot(a.corrSigDic['freq_list_hop']-a.corrSigDic['freq_list_ref'],
-#                 a.corrSigDic['coh_max_list'], marker='+')
-    
-    # a=CorrelationAnalysis(80338)
-    # isweep_list=[2,3,4,5]
-    # ifreq_list=np.linspace(20,39,20)
-    # fig, ax = plot_1d([],[], grid=True, xlabel='delta freq', ylabel='coherence')
-    # for i,sweeploc in enumerate(isweep_list):
-    #     a.wrapper_coherence_analysis(sweeploc, ifreq_list)
-    
-    #     ax.plot(a.corrSigDic['freq_list_hop']-a.corrSigDic['freq_list_ref'],
-    #             a.corrSigDic['coh_max_list'], marker='+', label='sweep = {} T=[{:.2f},{:.2f}]'.format(sweeploc, a.corrSigDic['t'][0][0], a.corrSigDic['t'][-1][0]))
-    
-    # # plt.yscale('log')
-    # plt.legend()
-    # plt.title('#{}'.format(a.shot))
-    
-    # isweep_list=[2,3,4,5]
-    # ifreq_list=np.linspace(1,19,19)
-    # fig, ax = plot_1d([],[], grid=True, xlabel='delta freq', ylabel='coherence')
-    # for i,sweeploc in enumerate(isweep_list):
-    #     a.wrapper_coherence_analysis(sweeploc, ifreq_list)
-    
-    #     ax.plot(a.corrSigDic['freq_list_hop']-a.corrSigDic['freq_list_ref'],
-    #             a.corrSigDic['coh_max_list'], marker='+', label='sweep = {} T=[{:.2f},{:.2f}]'.format(sweeploc, a.corrSigDic['t'][0][0], a.corrSigDic['t'][-1][0]))
-    
-    # # plt.yscale('log')
-    # plt.legend()
-    # plt.title('#{}'.format(a.shot))
-    
-# %%
+    # a=CorrelationAnalysis(82609, numDemod=True)
+    # a.plot_freq_pattern_sweep()
+    # tcorr_loc, coh_list, fcsd_spectral, spectral_coh_list, maxcoh_list, maxspectralcoh_list = a.get_correlation_isweep(isweep=4, plateau=3, mode='amp', ret=True)
 
-# a=CorrelationAnalysis(79797)
-# isweep_list=[8]
-# ifreq_list=np.linspace(20,39,20)
-# fig, ax = plot_1d([],[], grid=True)
-# for i,sweeploc in enumerate(isweep_list):
-#     a.wrapper_coherence_analysis(sweeploc, ifreq_list)
-#     ax.plot(a.rho_list_hop-a.rho_list_ref,
-#             a.corrSigDic['coh_max_list'], marker='+')
+    # rho_ref, rho_hop = a.get_raytracing_isweep(isweep=4, ret=True)
+    # fig, ax, im = plot_2d(np.transpose(coh_list), rho_hop, tcorr_loc, vmin=0, vmax=1)
+    # ax.set_ylim(-2e-5, 2e-5)
+    # ax.set_xlabel(r'$\rho$')
+    # ax.set_ylabel(r'time delay')
+    # plt.tight_layout()
+
+    # fig, ax, im = plot_2d(np.transpose(abs(spectral_coh_list)**2), rho_hop, fcsd_spectral, vmin=0, vmax=1)
+    # ax.set_ylim(-2e6, 2e6)
+    # ax.set_xlabel(r'$\rho$')
+    # ax.set_ylabel(r'frequency')
+    # plt.tight_layout()
 
 
-# a=CorrelationAnalysis(80257)
-# isweep_list=[2]
-# ifreq_list=np.linspace(20,39,20)
-# for i,sweeploc in enumerate(isweep_list):
-#     a.wrapper_coherence_analysis(sweeploc, ifreq_list, method='time')
-   
-# #%%
-# fig, ax = plot_1d([],[], grid=True)
-# ax.plot(a.rho_list_hop[20:40], a.corrSigDic['coh_max_list'], marker='+', color='blue')
-# ax.axvline(np.mean(a.rho_list_ref[20:40]), color='black')
-# ax.set_xlabel(r'$\Delta_\rho$')
-# ax.set_ylabel('coherence')
-# plt.yscale('log')
-# plt.title('#{} ; sweep {}'.format(80257, 2))
 
 
-# a=CorrelationAnalysis(80914)
-# isweep_list=[1]
-# ifreq_list=np.linspace(1,19,19)
-# fig, ax = plot_1d([],[])
-# for i,sweeploc in enumerate(isweep_list):
-#     a.wrapper_coherence_analysis(sweeploc, ifreq_list)
-#     ax.plot(a.corrSigDic['freq_list_hop']-a.corrSigDic['freq_list_ref'],
-#             a.corrSigDic['coh_max_list'], marker='+')
-
-
-# a=CorrelationAnalysis(80949, numDemod=True)
-# a.plot_freq_pattern_sweep()
-# isweep_list=[4]
-# ifreq_list=np.linspace(1,19,19)
-# fig, ax = plot_1d([],[], grid=True)
-# for i,sweeploc in enumerate(isweep_list):
-#     a.wrapper_coherence_analysis(sweeploc, ifreq_list)
-#     ax.plot(a.corrSigDic['freq_list_hop']-a.corrSigDic['freq_list_ref'],
-#             a.corrSigDic['coh_max_list'], marker='+', color='blue')
-
-# plt.xlabel('delta freq [GHz]')
-# plt.ylabel('coherence')
-    
-    
-# a=CorrelationAnalysis(81002, numDemod=True)
-# a.plot_freq_pattern_sweep()
-# isweep_list=[5]
-# ifreq_list=np.linspace(20,39,20)
-# fig, ax = plot_1d([],[], grid=True)
-# for i,sweeploc in enumerate(isweep_list):
-#     a.wrapper_coherence_analysis(sweeploc, ifreq_list)
-#     ax.plot(a.corrSigDic['freq_list_hop']-a.corrSigDic['freq_list_ref'],
-#             a.corrSigDic['coh_max_list'], marker='+')
-
-# plt.xlabel('delta freq [GHz]')
-# plt.ylabel('coherence')
-    
-    
