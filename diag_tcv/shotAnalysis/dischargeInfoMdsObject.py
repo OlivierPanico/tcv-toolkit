@@ -21,13 +21,12 @@ from DBS.beamtracing.src.equilibrium import Equilibrium2d
 
 
 #dataAnalysis
-from dataAnalysis.utils.plot_utils import prep_multiple_subplots, plot_1d, plot_2d, get_cmap_list
+from dataAnalysis.utils.plot_utils import prep_multiple_subplots, plot_1d, plot_2d, get_cmap_list, my_legend
 from dataAnalysis.utils.utils import get_closest_ind
 
 #TCV
 import tcv
 import MDSplus as mds
-
 ### ========== ###
 ### PARAMETERS ###
 ### ========== ###
@@ -49,12 +48,18 @@ cdict = {'red':   [[0.0,  0.0, 0.0],
 
 # cmap = LinearSegmentedColormap('custom', segmentdata=cdict, N=256)
 
-color_list = ['xkcd:blue', 'xkcd:red', 'xkcd:forest green', 'xkcd:teal', 'xkcd:orange', 'xkcd:magenta', 'brown', 'pink', 'grey', 'black']
+# color_list = ['xkcd:blue', 'xkcd:red', 'xkcd:forest green', 'xkcd:teal', 'xkcd:orange', 'xkcd:magenta', 'brown', 'pink', 'grey', 'black']
+
+color_list = ['red', 'blue', 'purple', 'green', 'xkcd:orange', 'xkcd:magenta', 'brown', 'pink', 'grey', 'black']
+
+color_list = ['green', 'blue', 'red',  'purple']
+
 from matplotlib.colors import ListedColormap
 cmap = ListedColormap(color_list)
 
 marker_list = ['+', 'x', 's', 'o', 'v', '^', '<', '>', 'p', 'P', '*', 'h', 'H', 'X', 'd', '|', '_']
 
+marker_list = ['o', '^', 's', 'D', 'x', 'v', '<', '>', 'p', 'h']
 
 ### INTERACTIVE FIGURES ###
 # from DBS.io.utils import run_line_magic
@@ -81,6 +86,9 @@ def isHydrogen(shot):
     hydrogen['80947'] = True
     hydrogen['80949'] = True
     hydrogen['80951'] = True
+    
+    #To verify
+    hydrogen['82547'] = True
     
     if str(shot) not in hydrogen:
         print(' --- hydrogen not filled: putting False as default --- ')
@@ -259,6 +267,15 @@ class TCVShot():
         self.tag_btor=False
         self.tag_q=False
 
+
+    def get_thomson_raw(self):
+        # try:
+        #     self.th_te_raw = self.tree.getNode('\RESULTS::thomson:te:foo').data()
+        #     print('foo')
+        # except:
+        self.th_te_raw = self.tree.getNode('\RESULTS::top:te').data()
+        print('ok')
+
     def get_thomson_fit(self):
         print('\n Loading Thomson FIT')
         #electron density shape(rho,t)
@@ -412,13 +429,13 @@ class TCVShot():
                 self.cxrs_ti, _ = handle_nan(self.cxrs_ti, self.cxrs_time, value=None)
                 self.cxrs_ti_err, self.cxrs_time = handle_nan(self.cxrs_ti_err, self.cxrs_time, value=None)
             if self.tag_cxrs_vtor:
-                self.cxrs_vtor, self.cxrs_vtor_time = handle_nan(self.cxrs_vtor, self.cxrs_vtor_time, value=None)
-            
+                self.cxrs_vtor, _ = handle_nan(self.cxrs_vtor, self.cxrs_vtor_time, value=None)
+                self.cxrs_vtor_err, self.cxrs_vtor_time = handle_nan(self.cxrs_vtor_err, self.cxrs_vtor_time, value=None)
 
 
-    def get_cxrs_raw(self):
+    def dep_get_cxrs_raw(self, set_nan_to_zero=False):
         '''
-        TO BE MODIFIED 
+        TO BE REMOVED IF THE VERSION WITH NODES WORKS PROPERLY 
         THIS VERSION HAS BEEN TAKEN FROM MATTEO 
         '''
         print('\n Loading CRXS raw data')
@@ -431,18 +448,79 @@ class TCVShot():
             self.tag_cxrs_raw = False
             return
 
+        ### vtor
         self.cxrs_rho_vtor_raw = self.VtorNode_raw.getDimensionAt(0).data()
         self.cxrs_time_vtor_raw = self.VtorNode_raw.getDimensionAt(1).data()
         self.cxrs_vtor_raw = self.VtorNode_raw.data()
         self.cxrs_vtor_err_raw = self.tree.getNode('\RESULTS::CXRS:VI_TOR:ERR').data()
+        
+        ### ni ; ti
+        self.cxrs_time_raw = self.tree.getNode('\RESULTS::CXRS.TI').getDimensionAt(1).data()
+        self.cxrs_rho_raw = self.tree.getNode('\RESULTS::CXRS.TI').getDimensionAt(0).data()
         self.cxrs_ni_raw = self.tree.getNode('\RESULTS::CXRS.NI').data()
         self.cxrs_ti_raw = self.tree.getNode('\RESULTS::CXRS.TI').data()
         self.cxrs_ni_err_raw = self.tree.getNode('\RESULTS::CXRS:NI:ERR').data()
         self.cxrs_ti_err_raw = self.tree.getNode('\RESULTS::CXRS:TI:ERR').data()
+        
+        ### vpol
         self.cxrs_time_vpol_raw = self.VpolNode_raw.getDimensionAt(1).data()
         self.cxrs_vpol_err_raw = self.tree.getNode('\RESULTS::CXRS:VI_POL:ERR').data()
         self.cxrs_vpol_raw = self.VpolNode_raw.data()
         self.cxrs_rho_vpol_raw = self.VpolNode_raw.getDimensionAt(0).data()
+
+        if set_nan_to_zero:
+            #Careful: this assume ti and ti_err are Nans at the same time
+            self.cxrs_ti_raw, _ = handle_nan(self.cxrs_ti_raw, self.cxrs_time_raw, value=None)
+            self.cxrs_ti_err_raw, self.cxrs_time_raw = handle_nan(self.cxrs_ti_err_raw, self.cxrs_time_raw, value=None)
+           
+
+    def get_cxrs_raw(self):
+        '''
+        CXRS raw data are obtained with systems 1,2,3,4, 7 
+        In practice not all systems are used for the proffit
+        This function loads raw data from every system
+        If you want to know which system is used for proffit: run (in matlab) "data = CXRS_load_MDS(81069, [], 'profiles');" in matlab 
+                                                                    and check "data.proffit.comment_TI"
+                                                                    data = CXRS_load_MDS(shotNo, [], 'profiles'); data.proffit
+        '''
+        print('\n Loading CRXS raw data')
+        
+        #Careful => ti_raw corresponds only to ti_raw_1 (default)
+        self.cxrs_ti_raw = self.tree.getNode('\RESULTS::CXRS.TI').data()
+        self.cxrs_ti_err_raw = self.tree.getNode('\RESULTS::CXRS.TI:ERR').data()
+        
+        self.cxrs_ti_raw_1 = self.tree.getNode('\RESULTS::CXRS_001.TI').data()
+        self.cxrs_ti_err_raw_1 = self.tree.getNode('\RESULTS::CXRS_001.TI:ERR').data()
+        self.cxrs_time_raw_1 = self.tree.getNode('\RESULTS::CXRS_001.TI').getDimensionAt(1).data()
+        self.cxrs_rho_raw_1 = self.tree.getNode('\RESULTS::CXRS_001.TI').getDimensionAt(0).data()
+        
+        self.cxrs_ti_raw_2 = self.tree.getNode('\RESULTS::CXRS_002.TI').data()
+        self.cxrs_ti_err_raw_2 = self.tree.getNode('\RESULTS::CXRS_002.TI:ERR').data()
+        self.cxrs_time_raw_2 = self.tree.getNode('\RESULTS::CXRS_002.TI').getDimensionAt(1).data()
+        self.cxrs_rho_raw_2 = self.tree.getNode('\RESULTS::CXRS_002.TI').getDimensionAt(0).data()
+        
+        self.cxrs_ti_raw_3 = self.tree.getNode('\RESULTS::CXRS_003.TI').data()
+        self.cxrs_ti_err_raw_3 = self.tree.getNode('\RESULTS::CXRS_003.TI:ERR').data()
+        self.cxrs_time_raw_3 = self.tree.getNode('\RESULTS::CXRS_003.TI').getDimensionAt(1).data()
+        self.cxrs_rho_raw_3 = self.tree.getNode('\RESULTS::CXRS_003.TI').getDimensionAt(0).data()
+        
+        self.cxrs_ti_raw_4 = self.tree.getNode('\RESULTS::CXRS_004.TI').data()
+        self.cxrs_ti_err_raw_4 = self.tree.getNode('\RESULTS::CXRS_004.TI:ERR').data()
+        self.cxrs_time_raw_4 = self.tree.getNode('\RESULTS::CXRS_004.TI').getDimensionAt(1).data()
+        self.cxrs_rho_raw_4 = self.tree.getNode('\RESULTS::CXRS_004.TI').getDimensionAt(0).data()
+        
+        #Careful => vtor corresponds only to vi_raw_1 (default)
+        self.cxrs_vtor_raw = self.tree.getNode('\RESULTS::CXRS.VI_TOR').data()
+        self.cxrs_vtor_err_raw = self.tree.getNode('\RESULTS::CXRS.VI_TOR:ERR').data()
+        
+        #Not sure of the difference between the vi_tor node and the detailed vi 1 & 2
+        self.cxrs_vi_raw_1 = self.tree.getNode('\RESULTS::CXRS_001.VI').data()
+        self.cxrs_vi_raw_2 = self.tree.getNode('\RESULTS::CXRS_002.VI').data()
+        self.cxrs_vi_err_raw_1 = self.tree.getNode('\RESULTS::CXRS_001.VI:ERR').data()
+        self.cxrs_vi_err_raw_2 = self.tree.getNode('\RESULTS::CXRS_002.VI:ERR').data()
+        
+        
+        
 
     def get_Ip(self):
         '''
@@ -549,7 +627,7 @@ class TCVShot():
             self.tag_btor = False
             self.btor = None
 
-    def get_rho_s_r_z(self, time_window, r, z, rho):
+    def get_rho_s_r_z(self, time_window, r, z, rho, debug=False):
         '''
         sound larmor radius from thomson temperature and mag eq
         time_window is a list: [tinit:tfin]
@@ -580,10 +658,61 @@ class TCVShot():
         z_ind = get_closest_ind(self.mag_eq_zgrid, z)
         
         _btor_loc = abs(self.btor[r_ind, z_ind])
+        
 
         omega_cs = (e*_btor_loc)/(self.m_i) #frequency in s**-1
         
+        if debug: 
+            print('--- diag get rho s r z --- ')
+            print('electron temperature at rho={} = {}'.format(self.th_rho[rho_te_loc], th_te_loc))
+            print('toroidal magnetic field at r={}, z={}: {}'.format(r, z, _btor_loc))
+            print('--- end diag get rho i r z --- ')
+            
+        
         return cs/omega_cs
+    
+    def get_rho_i_r_z(self, time_window, r, z, rho, debug=False):
+        '''
+        sound larmor radius from thomson temperature and mag eq
+        time_window is a list: [tinit:tfin]
+        SHOULD BE POSSIBLE TO ESTIMATE RHO FROM R AND Z
+        '''
+        
+        if self.tag_btor==False or self.tag_th_fit==False:
+            try:
+                self.get_cxrs_fit()
+                print('ok load cxrs fit')
+                self.get_btor(np.mean(time_window))
+            except:
+                print(" can't load ion larmor radius: check btor or CXRS data")
+                self.tag_rho_s = False
+                self.rho_s = None         
+
+        cxrs_ti_ind_init = get_closest_ind(self.cxrs_time, time_window[0])
+        cxrs_ti_ind_fin = get_closest_ind(self.cxrs_time, time_window[1])
+        
+        cxrs_ti_prof_loc = np.mean(self.cxrs_ti[cxrs_ti_ind_init:cxrs_ti_ind_fin,:], axis=0)
+        
+        rho_ti_loc = get_closest_ind(self.cxrs_rho, rho)
+        
+        th_ti_loc = cxrs_ti_prof_loc[rho_ti_loc]
+        
+        cs = np.sqrt(e*th_ti_loc/(self.m_i))  #sound speed in m/s
+        
+        r_ind = get_closest_ind(self.mag_eq_rgrid, r)
+        z_ind = get_closest_ind(self.mag_eq_zgrid, z)
+        
+        _btor_loc = abs(self.btor[r_ind, z_ind])
+
+        if debug: 
+            print('--- diag get rho i r z --- ')
+            print('ion temperature at rho={} = {}'.format(self.cxrs_rho[rho_ti_loc], th_ti_loc))
+            print('toroidal magnetic field at r={}, z={}: {}'.format(r, z, _btor_loc))
+            print('--- end diag get rho i r z --- ')
+            
+        omega_ci = (e*_btor_loc)/(self.m_i) #frequency in s**-1
+        
+        return cs/omega_ci
         
         
         
@@ -622,7 +751,6 @@ class TCVShot():
 
         r_axis = np.nanmean(r_axis)
         z_axis = np.nanmean(z_axis)
-
         d = np.sqrt((result.coord.R - r_axis)**2 + (result.coord.z - z_axis)**2) #poloidal small radius
         r = np.mean(d, axis=1) #poloidal avg 
         
@@ -809,7 +937,7 @@ class TCVShot():
             
         else:
             self.get_thomson_fit()
-            self.plot_thomson_prof(time, rhomin, rhomax)
+            self.plot_thomson_prof(time_list, rhomin, rhomax)
             
         
             
@@ -1015,7 +1143,10 @@ class TCVShot():
 
 
 
-def plot_profiles_comparison(shot_list, time_list, plot_err=None, rhomin=None, rhomax=None, tavg=None):
+def plot_profiles_comparison(shot_list, time_list, plot_err=None, rhomin=None, rhomax=None, tavg=None, label_list=None, title_on=True,  **kwargs):
+    
+    default_kwargs = {'marker':'+', 'markersize':1, 'fillstyle':'none', 'linewidth':2}
+    default_kwargs.update(kwargs)
     
     list_obj_tcv = [TCVShot(shot) for shot in shot_list]
     
@@ -1034,13 +1165,22 @@ def plot_profiles_comparison(shot_list, time_list, plot_err=None, rhomin=None, r
     # marker_list = 
 
 
-    fig ,axs = prep_multiple_subplots(2,2, figsize=(8,5), axgrid=[0,1,2,3], sharex=True)
-    fig.suptitle('#{} ; tavg = {}'.format(shot_list, tavg))
+    fig ,axs = prep_multiple_subplots(2,2, figsize=(14,6), axgrid=[0,1,2,3], constrained_layout=True, sharex=True)
+    
+    fontsize=22
+    
+    if title_on:
+        fig.suptitle('#{} ; tavg = {}'.format(shot_list, tavg))
     
     # fig, ax_te = plot_1d([], [], grid=True, xlabel=r'$\rho$', ylabel=r'$T_e$ $[eV]$')
     # fig, ax_ne = plot_1d([], [], grid=True, xlabel=r'$\rho$', ylabel=r'$n_e$ $[10^{19} m^{-3}]$')
     # fig, ax_ti = plot_1d([], [], grid=True, xlabel=r'$\rho$', ylabel=r'$T_i$ $[eV]$')
     for i in range(len(list_obj_tcv)):
+        
+        if label_list is not None:
+            label = label_list[i]
+        else:
+            label = '#{}, T={:.3f}'.format(shot_list[i], list_obj_tcv[i].th_time[th_time_ind_list[i]])
         
         # ---rho range------------------------------------- #
         th_rho_all = list_obj_tcv[i].th_rho
@@ -1083,24 +1223,24 @@ def plot_profiles_comparison(shot_list, time_list, plot_err=None, rhomin=None, r
         
         # ---plotting thomson data------------------------ #                   
         # list_obj_tcv[i].plot_heating(ax=axs[0,0], color=color_list[i])
-        axs[0,1].plot(th_rho, th_te/1e3 ,linewidth=2, markersize=4, fillstyle='none',
-                      label='#{}, T={:.3f}'.format(shot_list[i], list_obj_tcv[i].th_time[th_time_ind_list[i]]),  color=color_list[i], marker='')
+        axs[0,1].errorbar(th_rho, th_te/1e3, th_te_err/1e3, mec = color_list[i], mfc = color_list[i], mew = 1,
+                      label=label,  color=color_list[i], **default_kwargs)
         axs[0,1].fill_between(th_rho, (th_te-th_te_err)/1e3, (th_te+th_te_err)/1e3, color=color_list[i], alpha=0.2)    
     
-        axs[0,0].plot(th_rho, th_ne/10**19,linewidth=2, markersize=4, fillstyle='none',
-                      label='#{}, T={:.3f}'.format(shot_list[i], list_obj_tcv[i].th_time[th_time_ind_list[i]]), color=color_list[i], marker='')
+        axs[0,0].errorbar(th_rho, th_ne/10**19, th_ne_err/10**19, mec = color_list[i], mfc = color_list[i], mew = 1,
+                      label=label, color=color_list[i], **default_kwargs)
         axs[0,0].fill_between(th_rho, (th_ne-th_ne_err)/10**19, (th_ne+th_ne_err)/10**19, color=color_list[i], alpha=0.2)
         # ------------------------------------------------ #
 
-    axs[0,0].legend(fontsize="8")
+    my_legend(axs[0,1], fontsize=16)
     # axs[0,1].legend()
     # axs[1,1].legend()
-    axs[0,1].set_ylabel(r'$T_e$ $[keV]$')
-    axs[0,0].set_ylabel(r'$n_e$ $[10^{19} m^{-3}]$')
-    axs[1,0].set_ylabel(r'$v_{tor}$ $[km/s]$')
-    axs[1,1].set_ylabel(r'$T_i$ $[keV]$')
-    axs[1,0].set_xlabel(r'$\rho$')
-    axs[1,1].set_xlabel(r'$\rho$')
+    axs[0,1].set_ylabel(r'$T_e$ $[keV]$', fontsize=fontsize)
+    axs[0,0].set_ylabel(r'$n_e$ $[10^{19} m^{-3}]$', fontsize=fontsize)
+    axs[1,0].set_ylabel(r'$v_{\phi}$ $[km/s]$', fontsize=fontsize)
+    axs[1,1].set_ylabel(r'$T_i$ $[keV]$', fontsize=fontsize)
+    axs[1,0].set_xlabel(r'$\rho$', fontsize=fontsize)
+    axs[1,1].set_xlabel(r'$\rho$', fontsize=fontsize)
     
     
     #Data CXRS 
@@ -1113,6 +1253,11 @@ def plot_profiles_comparison(shot_list, time_list, plot_err=None, rhomin=None, r
         cxrs_vtor_time_ind_list = [get_closest_ind(list_obj_tcv[i].cxrs_vtor_time, time_list[i]) for i in range(len(list_obj_tcv))]
         
         for i in range(len(list_obj_tcv)):
+            
+            if label_list is not None:
+                label = label_list[i]
+            else:
+                label = '#{}, T={:.3f}'.format(shot_list[i], list_obj_tcv[i].cxrs_time[cxrs_time_ind_list[i]])
             
             cxrs_rho_all = list_obj_tcv[i].cxrs_rho
             if rhomin is not None:
@@ -1156,16 +1301,17 @@ def plot_profiles_comparison(shot_list, time_list, plot_err=None, rhomin=None, r
                     cxrs_vtor_err = np.zeros((np.shape(cxrs_vtor)))
                     cxrs_ti_err = np.zeros((np.shape(cxrs_ti)))
          
-            axs[1,0].plot(cxrs_rho, cxrs_vtor , markersize=4, fillstyle='none',
-                            label='#{}, T={:.3f}'.format(shot_list[i], list_obj_tcv[i].cxrs_vtor_time[cxrs_vtor_time_ind_list[i]]), color=color_list[i], marker='')
+            axs[1,0].errorbar(cxrs_rho, cxrs_vtor, cxrs_vtor_err, mec = color_list[i], mfc = color_list[i], mew = 1,
+                            label=label, color=color_list[i], **default_kwargs)
             axs[1,0].fill_between(cxrs_rho, cxrs_vtor-cxrs_vtor_err, cxrs_vtor+cxrs_vtor_err, color=color_list[i], alpha=0.2)
+            axs[1,0].ticklabel_format(axis='y', style='sci', scilimits=(0,0))
             
-            axs[1,1].plot(cxrs_rho, cxrs_ti/1e3,markersize=4, fillstyle='none',
-                        label='#{}, T={:.3f}'.format(shot_list[i], list_obj_tcv[i].cxrs_time[cxrs_time_ind_list[i]]), color=color_list[i], marker='')
+            axs[1,1].errorbar(cxrs_rho, cxrs_ti/1e3, cxrs_ti_err/1e3, mec = color_list[i], mfc = color_list[i], mew = 1,
+                        label=label, color=color_list[i], **default_kwargs)
             axs[1,1].fill_between(cxrs_rho, (cxrs_ti-cxrs_ti_err)/1e3, (cxrs_ti+cxrs_ti_err)/1e3, color=color_list[i], alpha=0.2)
             
       
-        axs[0,0].legend(fontsize="8")
+        # axs[0,0].legend(fontsize="8")
 
     except:
         print('No CXRS data')
@@ -1184,7 +1330,7 @@ def plot_profiles_comparison(shot_list, time_list, plot_err=None, rhomin=None, r
 
 
 
-def plot_profiles_comparison_single_column(shot_list, time_list, plot_err=None, rhomin=None, rhomax=None, tavg=None):
+def plot_profiles_comparison_single_column(shot_list, time_list, plot_err=None, rhomin=None, rhomax=None, tavg=None, title_on=True):
     
     list_obj_tcv = [TCVShot(shot) for shot in shot_list]
     
@@ -1203,8 +1349,9 @@ def plot_profiles_comparison_single_column(shot_list, time_list, plot_err=None, 
     # marker_list = 
 
 
-    fig ,axs = prep_multiple_subplots(4,1, axgrid=[0,1,2,3], sharex=True)
-    fig.suptitle('#{} ; tavg = {}'.format(shot_list, tavg))
+    fig ,axs = prep_multiple_subplots(4,1, axgrid=[0,1,2,3], figsize=(8,8), constrained_layout=True, sharex=True)
+    if title_on:
+        fig.suptitle('#{} ; tavg = {}'.format(shot_list, tavg))
     
     # fig, ax_te = plot_1d([], [], grid=True, xlabel=r'$\rho$', ylabel=r'$T_e$ $[eV]$')
     # fig, ax_ne = plot_1d([], [], grid=True, xlabel=r'$\rho$', ylabel=r'$n_e$ $[10^{19} m^{-3}]$')
@@ -1348,6 +1495,60 @@ def plot_profiles_comparison_single_column(shot_list, time_list, plot_err=None, 
     # ax_ne.legend()
     # ax_ti.legend()
     return axs
+
+
+
+def plot_Ti(shot, fiterr=False, raw=False, rawerr=False, ax=None, **kwargs):
+    a=TCVShot(shot)
+    a.get_cxrs_raw()
+    a.get_cxrs_fit(set_nan_to_zero=True)
+
+    if ax is None:
+        fig, ax = plot_1d([], [], grid=True)
+    
+    if raw:
+        ax.errorbar(a.cxrs_rho_raw_1, a.cxrs_ti_raw_1/1e3, a.cxrs_ti_err_raw_1/1e3, marker='+', linestyle='', color='blue', alpha=0.4)
+        ax.errorbar(a.cxrs_rho_raw_2, a.cxrs_ti_raw_2/1e3, a.cxrs_ti_err_raw_2/1e3, marker='+', linestyle='', color='blue', alpha=0.4)
+        ax.errorbar(a.cxrs_rho_raw_3, a.cxrs_ti_raw_3/1e3, a.cxrs_ti_err_raw_3/1e3, marker='+', linestyle='', color='blue', alpha=0.4)
+        ax.errorbar(a.cxrs_rho_raw_4, a.cxrs_ti_raw_4/1e3, a.cxrs_ti_err_raw_4/1e3, marker='+', linestyle='', color='blue', alpha=0.4)
+    
+    if rawerr:
+        ax.errorbar(a.cxrs_rho_raw_1, (a.cxrs_ti_raw_1-a.cxrs_ti_err_raw_1)/1e3, (a.cxrs_ti_err_raw_1)/1e3, marker='+', linestyle='', color='blue', alpha=0.4)
+        ax.errorbar(a.cxrs_rho_raw_2, (a.cxrs_ti_raw_2-a.cxrs_ti_err_raw_2)/1e3, (a.cxrs_ti_err_raw_2)/1e3, marker='+', linestyle='', color='blue', alpha=0.4)
+        ax.errorbar(a.cxrs_rho_raw_3, (a.cxrs_ti_raw_3-a.cxrs_ti_err_raw_3)/1e3, (a.cxrs_ti_err_raw_3)/1e3, marker='+', linestyle='', color='blue', alpha=0.4)
+        ax.errorbar(a.cxrs_rho_raw_4, (a.cxrs_ti_raw_4-a.cxrs_ti_err_raw_4)/1e3, (a.cxrs_ti_err_raw_4)/1e3, marker='+', linestyle='', color='blue', alpha=0.4)
+    
+    
+    
+
+shot_list = [82611, 82612, 81069, 81065, 81065, 81069]
+timewindow_list = [[0.8,1.1], [1.3,1.7], [1.65,1.75], [0.85,0.95], [1.45,1.55], [0.65,0.75]]
+
+
+sys_list_list = [[1,2,3,4], [1,2,3,4], [1,2,3], [1,2,3,4], [1,2,3,4], [1,2,3]]
+
+shot_list_ech = [82611, 82612]
+timewindow_list_ech = [[0.8,1.1], [1.3,1.7]]
+sys_list_list_ech = [[1,2,3,4], [1,2,3,4]]
+
+def plot_ti_raw_several_shots(shot_list, timewindow_list, sys_list_list):
+    color_list = ['green', 'blue', 'orange', 'red', 'purple', 'black']
+    marker_list = ['circle', 'triangle', 'square', 'diamond', 'cross', 'plus']
+    
+    # fig, ax = plot_1d([], [], grid=True, xlabel=r'$\rho_\psi$', ylabel=r'$T_i$')
+    fig, ax = plot_1d([], [], grid=True)
+    for shot, color, marker, timewindow, sys_list in zip(shot_list, color_list, marker_list, timewindow_list, sys_list_list):
+        plot_ti_raw(shot, timewindow, sys_list, color=color, ax=ax, marker=marker)
+
+    ax.set_xlim(0.6, 1.1)
+    ax.set_ylim(0, 0.8)
+    ax.ticklabel_format(axis='y', style='plain')
+
+
+
+
+
+
 
 
 

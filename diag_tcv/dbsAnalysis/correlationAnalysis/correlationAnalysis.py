@@ -62,13 +62,10 @@ class CorrelationAnalysis(TCVShot):
         
         self.machine = machine
         self.tmp_dir = defs.DATA_TMP_DIR / f'{self.machine}'
-
-        # self.gas = isHydrogen(self.shot) moved to dischargeObject
         
         self.modeCorrelation = isModeCorrelation(self.shot)
         self.numDemod = numDemod
 
-        
         self.xmode = xmode    
         self.plot = plot
     
@@ -118,9 +115,10 @@ class CorrelationAnalysis(TCVShot):
         
         #Mode correlation: ref and hop have artificially inverted doppler shift
         #If mode correlation => then correlate ref and np.conjugate(hop)
+        #I think it was only useful for old discharges now we never use this?
         print(' --> mode correlation: {}'.format(self.modeCorrelation))
         
-        print(' --> params stored in dbs_ref.params / dbs_hop.params')
+        print(' --> params stored in self.params_ref / self.params_hop')
 
     ### ========================== ###
     ### ACCESS TO DATA FOR A SWEEP ###
@@ -373,10 +371,12 @@ class CorrelationAnalysis(TCVShot):
             return delta
     
     
-    def get_rho_s_plateau(self, isweep, retdata=False):
+    def get_rho_s_plateau(self, isweep, rho_i=False, retdata=False):
         '''
         Get the normalization rho_s for each plateau in the sweep
         '''
+        
+        #Compute delta
         if 'delta' not in self.processedData['sweep'+str(isweep)]:
             self.get_delta(isweep)
         
@@ -396,7 +396,12 @@ class CorrelationAnalysis(TCVShot):
         for i in range(self.nb_plateaus):
             r_ref_loc = r_ref[self.plateaus_indices[i][0]:self.plateaus_indices[i][1]+1]
             z_ref_loc = z_ref[self.plateaus_indices[i][0]:self.plateaus_indices[i][1]+1]
-            rho_s_loc = self.get_rho_s_r_z(time_window=[sweep_tinit, sweep_tinit+length_sweep], r=np.mean(r_ref_loc),
+            
+            if rho_i:
+                rho_s_loc = self.get_rho_i_r_z(time_window=[sweep_tinit, sweep_tinit+length_sweep], r=np.mean(r_ref_loc),
+                                           z=np.mean(z_ref_loc), rho=np.mean(self.processedData['sweep'+str(isweep)]['rho_list_ref'][self.plateaus_indices[i][0]:self.plateaus_indices[i][1]+1]))
+            else: 
+                rho_s_loc = self.get_rho_s_r_z(time_window=[sweep_tinit, sweep_tinit+length_sweep], r=np.mean(r_ref_loc),
                                            z=np.mean(z_ref_loc), rho=np.mean(self.processedData['sweep'+str(isweep)]['rho_list_ref'][self.plateaus_indices[i][0]:self.plateaus_indices[i][1]+1]))
             #put the rho_s in cm
             rho_s_loc = rho_s_loc*100
@@ -463,6 +468,11 @@ class CorrelationAnalysis(TCVShot):
             fit_maxspectralcoh = dictFullCohAnalysis['max_fit_spectral_coh']
             err_fit_maxspectralcoh = dictFullCohAnalysis['err_max_fit_spectral_coh']
 
+
+            # lower_error = np.minimum(err_fit_maxspectralcoh_list, fit_maxspectralcoh)  # Ensure the lower error does not exceed the value of y
+            # upper_error = np.minimum(err_fit_maxspectralcoh_list, 1 - fit_maxspectralcoh)
+            # asymmetric_error = [lower_error, upper_error]
+
             #We fill with full functions and with the max values
             corr_list[i,:] = corr_loc
             spectral_coh_list[i,:] = spectral_coh_loc
@@ -519,6 +529,7 @@ class CorrelationAnalysis(TCVShot):
         
         x_norm : str, 
             - 'rho_s': delta given in rho_s units
+            - 'rho_i': delta given in rho_i units
             - 'rho_hop' : position of hop channel
             - 'cm': delta in cm
         
@@ -540,7 +551,10 @@ class CorrelationAnalysis(TCVShot):
         if load_if_existing is False or 'delta' not in self.processedData['sweep'+str(isweep)]:
             self.get_delta(isweep)
         if load_if_existing is False or 'rho_s_plateaus' not in self.processedData['sweep'+str(isweep)]:
-            self.get_rho_s_plateau(isweep)
+            if x_norm == 'rho_i':
+                self.get_rho_s_plateau(isweep, rho_i=True)
+            else:
+                self.get_rho_s_plateau(isweep)
         
 
         rho_list_hop = self.processedData['sweep'+str(isweep)]['rho_list_hop']
@@ -570,9 +584,8 @@ class CorrelationAnalysis(TCVShot):
             rho_hop_err_plus = np.max(rho_hop_loc) - rho_loc
             rho_hop_err_minus = rho_loc - np.min(rho_hop_loc)
             #Step 2: if normalization by rho_s
-            if x_norm=='rho_s':
+            if x_norm=='rho_s' or x_norm=='rho_i':
                 delta_loc = delta_loc/rho_s_loc
-            
             
             #Step 3: load arrays for the given plateau
             maxcorr_list         = self.processedData['sweep'+str(isweep)]['maxcorr_list'][plat_indices[0]:plat_indices[1]+1]
@@ -614,13 +627,17 @@ class CorrelationAnalysis(TCVShot):
     
 
     
-    def plot_coherence_delta_isweep(self, isweep, plateau_list=None, ax=None, plot_fit_spec = True, plot_raw_spec=False, plot_corr=False, ylog=True, caption=True, add_pt_zero=True, x_norm='rho_s', mode='amp', load_if_existing=False, retdata=False, **kwargs):
+    def plot_coherence_delta_isweep(self, isweep, plateau_list=None, ax=None, plot_fit_spec = True, plot_raw_spec=False, plot_corr=False, ylog=True, caption=True, title=True, add_pt_zero=True, x_norm='rho_s', mode='amp', load_if_existing=False, plot_err=True, retdata=False, **kwargs):
         
         
         prepData=self.prepare_coherence_for_plot(isweep, add_pt_zero=add_pt_zero, x_norm=x_norm, mode=mode, load_if_existing=load_if_existing, retdata=True)
        
-        nb_plateaus = prepData['nb_plateaus']
-        plateau_list = prepData['plateau_list']
+        if plateau_list is None:
+            nb_plateaus = prepData['nb_plateaus']
+            plateau_list = prepData['plateau_list']
+        else:
+            nb_plateaus = len(plateau_list)
+            
         if ax is None:
             create_ax = True
         else:
@@ -645,21 +662,26 @@ class CorrelationAnalysis(TCVShot):
                 default_kwargs_raw_spec.update(kwargs)
                 default_kwargs_corr.update(kwargs)
                 
-                if plot_fit_spec:
-                    ax.errorbar(delta_loc, fit_maxspectralcoh,err_fit_maxspectralcoh, **default_kwargs_fit_spec)
                 
-                if plot_raw_spec:
-                    ax.plot(delta_loc, raw_maxspectralcoh, linestyle='-.',  **default_kwargs_raw_spec)
-                    
+                if plot_fit_spec and plot_err:
+                    ax.errorbar(delta_loc, fit_maxspectralcoh,err_fit_maxspectralcoh, **default_kwargs_fit_spec)
+                else:
+                    ax.plot(delta_loc, fit_maxspectralcoh, **default_kwargs_fit_spec)
                 if plot_corr:
                     ax.plot(delta_loc, maxcorr, fillstyle='none', linestyle='--', **default_kwargs_corr)
-                    
+                if plot_raw_spec:
+                    ax.plot(delta_loc, raw_maxspectralcoh, fillstyle='none', linestyle='-.',  **default_kwargs_raw_spec)
+                   
+                ax.plot(0,1, color='red', marker='*', markersize=15, zorder=5)
+                 
+                if title:
+                    ax.set_title(r' #{} sweep {} $\rho$ = {:.2f}'.format(self.shot, isweep, rho_loc))
                 if caption:
-                    ax.set_title(r' #{} sweep {} $\rho_\psi$ = {:.2f}'.format(self.shot, isweep, rho_loc))
                     my_legend(ax, loc='upper left')
                     my_text(ax, 0.8,0.2, r'$\rho_s$ = {:.1f} mm'.format(rho_s_loc*10))
-                    ax.set_ylabel('correlation')
-                    ax.set_ylim(0.1,1.1)
+                    ax.set_ylabel('max. correlation')
+                    # ax.set_ylim(0.1,1.1)
+                    
                     
                     if x_norm == 'rho_hop':
                         ax.set_xlabel(r'$\rho_{hop}$')
@@ -676,10 +698,12 @@ class CorrelationAnalysis(TCVShot):
                 
                 if ylog:
                     ax.set_yscale('log')
+                    
+                ax.set_ylim(0,1.1)
 
-    
-      
-    
+                if retdata:
+                    return fig, ax
+        
     def plot_velocity_isweep(self, isweep, plateau_list=None, ax=None, several_axes=False, x_norm='rho_hop', load_if_existing=True,caption=True, retdata=False, **kwargs):
         ''' plot the velocity for a given sweep and plateaus
             different options for x scale: 
@@ -804,7 +828,7 @@ class CorrelationAnalysis(TCVShot):
                                         
             axs[0].set_title(r'#{}'.format(self.shot))
         
-            axs[0].set_ylabel('correlation')
+            axs[0].set_ylabel('max. correlation')
             axs[0].set_ylim(0.1,1.1)
             axs[1].set_ylabel(r'$v_\perp$ [m/s]')
             if x_norm == 'rho_hop':
@@ -1262,7 +1286,7 @@ class CorrelationAnalysis(TCVShot):
 
 
 
-def plot_correlation_slopes(xdata, ydata, rho_s=None, rho_loc = None, ind_turb=None, ind_aval=None, ind_turb_pos=None, exclude_aval=None, caption=True, xunit='rho_s', ax=None, ylog=True, retdata=False, **kwargs):
+def plot_correlation_slopes(xdata, ydata, err=None, rho_s=None, rho_loc = None, ind_turb=None, ind_aval=None, ind_turb_pos=None, impose_max=True, exclude_aval=None, caption=True, xunit='rho_s', ax=None, ylog=True, retdata=False, **kwargs):
     '''
     Assumes that xdata is given in delta/rho_s
     
@@ -1278,7 +1302,8 @@ def plot_correlation_slopes(xdata, ydata, rho_s=None, rho_loc = None, ind_turb=N
     if ax is None:
         fig, ax = plot_1d([], [], grid=True)
     
-    ax.plot(xdata, (ydata), **default_kwargs)
+    ax.errorbar(xdata, (ydata), err, **default_kwargs)
+    ax.plot(0,1, color='black', marker='*', markersize=15, zorder=5)
     
     if caption:
         if rho_s is not None:
@@ -1290,10 +1315,15 @@ def plot_correlation_slopes(xdata, ydata, rho_s=None, rho_loc = None, ind_turb=N
     if ind_turb is not None:
         ind_turb_min=ind_turb[0]    
         ind_turb_max=ind_turb[1]
-        popt, perr, rsquared = my_linearRegression(xdata[ind_turb_min:ind_turb_max], np.log(ydata[ind_turb_min:ind_turb_max]), mode='affine')
+        if impose_max:
+            popt, perr, rsquared = my_linearRegression(xdata[ind_turb_min:ind_turb_max], np.log(ydata[ind_turb_min:ind_turb_max]), mode='affine', b=0)
+        else:
+            popt, perr, rsquared = my_linearRegression(xdata[ind_turb_min:ind_turb_max], np.log(ydata[ind_turb_min:ind_turb_max]), mode='affine')
         ax.plot(xdata[ind_turb_min:ind_turb_max], np.exp(popt[0]*xdata[ind_turb_min:ind_turb_max]+ popt[1]), 'r', marker='')
         lc = 1/popt[0]
         lcerr = perr[0]/popt[0]**2
+        # lcerr = max(abs(abs(1/(popt[0]-perr[0]) - abs(1/popt[0]))), abs(abs(1/(popt[0]+perr[0]) - abs(1/popt[0]))) )
+       
         print('Lc = {:.2f} +/- {:.2f} ; R² = {:.2f}'.format(lc, lcerr, rsquared))
         
         if caption:
@@ -1321,6 +1351,8 @@ def plot_correlation_slopes(xdata, ydata, rho_s=None, rho_loc = None, ind_turb=N
         ax.plot(xdata[ind_aval_min:ind_aval_max], np.exp(popt[0]*xdata[ind_aval_min:ind_aval_max] + popt[1]), 'g', marker='')
         laval = 1/popt[0]
         lavalerr = perr[0]/popt[0]**2
+        # lavalerr = max(abs(abs(1/(popt[0]-perr[0]) - abs(1/popt[0]))), abs(abs(1/(popt[0]+perr[0]) - abs(1/popt[0]))) )
+       
         Caval = ydata[ind_aval_max]
         print('La = {:.2f} +/- {:.2f} ; R² = {:.2f} ; Caval = {:.2f}'.format(laval, lavalerr, rsquared, Caval))
         Cavalerr = 0.1
@@ -1339,10 +1371,14 @@ def plot_correlation_slopes(xdata, ydata, rho_s=None, rho_loc = None, ind_turb=N
     if ind_turb_pos is not None:
         ind_turb_min=ind_turb_pos[0]
         ind_turb_max=ind_turb_pos[1]
-        popt, perr, rsquared = my_linearRegression(xdata[ind_turb_min:ind_turb_max], np.log(ydata[ind_turb_min:ind_turb_max]), mode='affine')
+        if impose_max:
+            popt, perr, rsquared = my_linearRegression(xdata[ind_turb_min:ind_turb_max], np.log(ydata[ind_turb_min:ind_turb_max]), mode='affine', b=0)
+        else:
+            popt, perr, rsquared = my_linearRegression(xdata[ind_turb_min:ind_turb_max], np.log(ydata[ind_turb_min:ind_turb_max]), mode='affine')
         ax.plot(xdata[ind_turb_min:ind_turb_max], np.exp(popt[0]*xdata[ind_turb_min:ind_turb_max]+ popt[1]), 'b', marker='')
         lcplus = abs(1/popt[0])
         lcpluserr = perr[0]/popt[0]**2
+        # lcpluserr = max(abs(abs(1/(popt[0]-perr[0]) - abs(1/popt[0]))), abs(abs(1/(popt[0]+perr[0]) - abs(1/popt[0]))) )
         print('Lc+ = {:.2f} +/- {:.2f} ; R² = {:.2f}'.format(lcplus, lcpluserr, rsquared))
         
         if caption:
@@ -1358,13 +1394,13 @@ def plot_correlation_slopes(xdata, ydata, rho_s=None, rho_loc = None, ind_turb=N
     if ylog:
         plt.yscale('log')
     
-    plt.ylim(0.07,1.1)
-    plt.ylabel('correlation')
+    plt.ylim(0.04,1.1)
+    plt.ylabel('max. correlation')
     plt.axhline(1, color='black', linestyle='--')
     plt.axvline(0, color='black', linestyle='--')
     
     if xunit=='rho_s':
-        plt.xlabel(r'$\Delta$ $[\rho_s]$')
+        plt.xlabel(r'$\Delta / \rho_s$')
     elif xunit=='cm':
         plt.xlabel(r'$\Delta$ $[cm]$')
     
@@ -1409,3 +1445,5 @@ def plot_correlation_slopes(xdata, ydata, rho_s=None, rho_loc = None, ind_turb=N
 
 
 
+
+# %%

@@ -90,6 +90,7 @@ def plot_velocity_prof(prof, ax=None, ifreq_list=None, sort=False, validated=Fal
     ax.set_xlabel(r'$\rho_\psi$')
     ax.set_ylabel(r'$v_\perp$ [km/s]')
     ax.set_title('#{}'.format(prof.shot.values[0]))
+    ax.set_ylim(-2.5e3, 1e2)
     fig.tight_layout()
     
     

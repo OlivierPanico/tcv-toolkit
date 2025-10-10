@@ -41,9 +41,8 @@ def correlation_mixed_files(zref_norm, zhop_norm, dt, plot=False):
     corr_from_csd = cF.compute_correlation_function(csd, dt)
     corr = cF.shift_correlation_function(corr_from_csd)
     tcorr_spec = scipy.signal.correlation_lags(nperseg, nperseg, mode='same')*dt
-
     tcorr_scipy, corr_scipy = cF.scipy_correlation_function(zref_norm, zhop_norm, dt, nperseg=nperseg, noverlap=noverlap, window=window, remove_mean=remove_mean)
-        
+    
     if plot:
         #4. Plot the correlation function and spectral coherence
         fig, ax = plot_1d([], [], grid=True)
@@ -81,14 +80,16 @@ shot1 = 80949
 isweep1 = 6
 ifreq1 = [1]
 a=CorrelationAnalysis(shot1, numDemod=True)
-z_list_ref1, z_list_hop1, t_reduced_list_ref1, t_reduced_list_hop1 = a.get_normalized_data_isweep(isweep1, ifreq_list=ifreq1, dtsart=400.e-6, dtend=100.e-6, ret=True)
-
+z_list_ref1, z_list_hop1, t_reduced_list_ref1, t_reduced_list_hop1 = a.get_normalized_data_isweep(isweep1, dtsart=400.e-6, dtend=100.e-6, ret=True)
+# z_list_ref1 = z_list_ref1[ifreq1[0]]
+# z_list_hop1 = z_list_hop1[ifreq1[0]]
 shot2 = 80940
 isweep2 = 9
 ifreq2 = [8]
 b=CorrelationAnalysis(shot2, numDemod=True)
-z_list_ref2, z_list_hop2, t_reduced_list_ref2, t_reduced_list_hop2 = b.get_normalized_data_isweep(isweep2, ifreq_list=ifreq2, dtsart=400.e-6, dtend=100.e-6, ret=True)
-
+z_list_ref2, z_list_hop2, t_reduced_list_ref2, t_reduced_list_hop2 = b.get_normalized_data_isweep(isweep2, dtsart=400.e-6, dtend=100.e-6, ret=True)
+# z_list_ref2 = z_list_ref2[ifreq2[0]]
+# z_list_hop2 = z_list_hop2[ifreq2[0]]
 #%% Plot the two signals
 fig, ax = plot_1d([],[],grid=True)
 # ax.plot(t_reduced_list_ref1[0], z_list_ref1[0], label='Shot {}, isweep {}, ifreq {}'.format(shot1, isweep1, ifreq1[0]), marker='')

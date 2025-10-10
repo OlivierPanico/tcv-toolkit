@@ -340,9 +340,9 @@ def custom_lorentz_fit_wrapper(xdata, ydata, p0=None, verbose=False, **kwargs):
 
 
 #%% Test for a full radial correlation function
-shot = 81069
-isweep = 5
-plat = 1
+shot = 82607
+isweep = 3
+plat = 0
 
 if plat == 0:
     indmin=0
