@@ -191,7 +191,7 @@ class CorrelationAnalysis(TCVShot):
 
 
         
-    def plot_heating_with_sweeps(self, list_isweep, **kwargs):
+    def plot_heating_with_sweeps(self, list_isweep, return_ax=False, **kwargs):
         
         if 'markevery' not in kwargs:
             kwargs['markevery'] = 20
@@ -216,7 +216,8 @@ class CorrelationAnalysis(TCVShot):
                         verticalalignment='center',
                         bbox=bbox,
                         color='black')
-           
+        if return_ax:
+            return ax   
 
     ### ========================== ###
     ### ACCESS TO DATA FOR A SWEEP ###
@@ -1330,7 +1331,7 @@ def plot_correlation_slopes(xdata, ydata, err=None, rho_s=None, rho_loc = None, 
             if xunit=='rho_s':
                 my_text(ax, 0.8, 0.4, r'$l_c \approx$ {:.2f} +/- {:.2f} $\rho_s$'.format(lc, lcerr), fontsize=12, color='r')
             elif xunit=='cm':
-                my_text(ax, 0.8, 0.4, r'$l_c \approx$ {:.2f} +/- {:.2f} $\cm$'.format(lc, lcerr), fontsize=12, color='r')
+                my_text(ax, 0.8, 0.4, r'$l_c \approx$ {:.2f} +/- {:.2f} cm'.format(lc, lcerr), fontsize=12, color='r')
         
     else:
         lc = None
