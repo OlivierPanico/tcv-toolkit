@@ -9,6 +9,7 @@
 
 #=== imports ===#
 #General imports
+import math as mp
 import numpy as np
 import matplotlib.pyplot as plt
 import pandas as pd
@@ -78,21 +79,33 @@ e = 1.6022E-19        #Charge electron
 ### ============== ###
 def isHydrogen(shot):
     hydrogen={}
+    #Velocity NBI 
     hydrogen['80931'] = True
     hydrogen['80939'] = True
-    hydrogen['80940'] = True
-    hydrogen['80942'] = True
     hydrogen['80946'] = True
     hydrogen['80947'] = True
-    hydrogen['80949'] = True
+    #SPR NBI
     hydrogen['80951'] = True
-    
-    #To verify
+    hydrogen['80942'] = True
+    #Correlation NBI 
+    hydrogen['80940'] = True
+    hydrogen['80949'] = True
+    hydrogen['82543'] = True
+    hydrogen['82545'] = True
     hydrogen['82547'] = True
-    
+    hydrogen['82556'] = True
+    #Correlation ECH
+    hydrogen['82549'] = True
+    hydrogen['82563'] = True
+    #SPR ECH
+    hydrogen['82562'] = True
+    hydrogen['82558'] = True
+
     if str(shot) not in hydrogen:
         print(' --- hydrogen not filled: putting False as default --- ')
         return False
+    else: 
+        print(' --- hydrogen filled: ion mass set to mproton --- ')
     return hydrogen[str(shot)]
 
 
@@ -257,11 +270,14 @@ class TCVShot():
             self.m_i = m_proton
         else:
             self.m_i = 2*m_proton
+    
+        if verbose:
+            print('Ion mass set to {} kg'.format(self.m_i))
         
         self.cmap = cmap
         
         self.tag_th_fit=False
-        
+        self.tag_cxrs_ti = False
         #mag eq
         self.tag_eq_mag = False
         self.tag_btor=False
@@ -519,8 +535,90 @@ class TCVShot():
         self.cxrs_vi_err_raw_1 = self.tree.getNode('\RESULTS::CXRS_001.VI:ERR').data()
         self.cxrs_vi_err_raw_2 = self.tree.getNode('\RESULTS::CXRS_002.VI:ERR').data()
         
+    def get_gradient_at_rho(self, time_window, rhoval, plot=False):
+        ''' This function has to take in a given rho and return local gradient values in term of ne, Te and Ti. Should also return the normalized gradients: dn/n and dT/T, averaged over a given time window '''
+        if self.tag_th_fit==False:
+            try:
+                self.get_thomson_fit()
+            except:
+                print(" can't load Thomson data")
+                return
+        if self.tag_cxrs_ti==False:
+            try:
+                self.get_cxrs_fit(set_nan_to_zero=False)
+            except:
+                print(" can't load CXRS data")
+                return
+        #get time indices
+        ind_tinit = get_closest_ind(self.th_time, time_window[0])
+        ind_tfin = get_closest_ind(self.th_time, time_window[1])+1 
+        #average over time window
+        th_ne_avg = np.nanmean(self.th_ne[:,ind_tinit:ind_tfin], axis=1)
+        th_te_avg = np.nanmean(self.th_te[:,ind_tinit:ind_tfin], axis=1)
+        if self.tag_cxrs_ti:
+            cxrs_ti_avg = np.nanmean(self.cxrs_ti[ind_tinit:ind_tfin, :], axis=0)
+        else: 
+            cxrs_ti_avg = mp.nan
         
+        mageq = Equilibrium2d.from_shot('tcv', self.shot, (time_window[0]+time_window[1])/2)
+        # omp_data = mageq.get_omp_data(Ngrid=100, side='LFS')
+        dn_dr = mageq.get_gradient_at_OMP(self.th_rho, th_ne_avg)
+        get_closest_ind(self.th_rho, rhoval)
         
+        dTe_dr = mageq.get_gradient_at_OMP(self.th_rho, th_te_avg)
+        if self.tag_cxrs_ti:
+            dTi_dr = mageq.get_gradient_at_OMP(self.cxrs_rho, cxrs_ti_avg)
+        else:
+            dTi_dr = mp.nan
+        
+        if plot:
+            fig, ax = plot_1d([], [], grid=True)
+            ax.plot(self.th_rho, th_ne_avg, label='ne', color='blue')
+            ax.plot(self.th_rho, dn_dr, label='dn/dr', color='red')
+            ax.set_ylabel('ne ; dn/dr')
+            ax.set_xlabel(r'$\rho$')
+            ax.set_title('Local gradient of ne')
+            ax.legend()
+            
+            fig, ax = plot_1d([], [], grid=True)
+            ax.plot(self.th_rho, th_te_avg, label='Te', color='blue')
+            ax.plot(self.th_rho, dTe_dr, label='dTe/dr', color='red')
+            ax.set_ylabel('Te ; dTe/dr')
+            ax.set_xlabel(r'$\rho$')
+            ax.set_title('Local gradient of Te')
+            ax.legend()
+            
+            fig, ax = plot_1d([], [], grid=True)
+            ax.plot(self.cxrs_rho, cxrs_ti_avg, label='Ti', color='blue', marker='+')
+            ax.plot(self.cxrs_rho, dTi_dr, label='dTi/dr', color='red', marker='x')
+            ax.set_ylabel('Ti ; dTi/dr')
+            ax.set_xlabel(r'$\rho$')
+            ax.set_title('Local gradient of Ti')
+            ax.legend()
+            
+        th_rho_ind = get_closest_ind(self.th_rho, rhoval)
+        if self.tag_cxrs_ti:
+            cxrs_rho_ind = get_closest_ind(self.cxrs_rho, rhoval)
+        else:
+            cxrs_rho_ind = mp.nan
+        
+        dn_dr_loc = dn_dr[th_rho_ind]
+        dTe_dr_loc = dTe_dr[th_rho_ind]
+        if self.tag_cxrs_ti:
+            dTi_dr_loc = dTi_dr[cxrs_rho_ind]
+        else:
+            dTi_dr_loc = mp.nan
+        
+        dn_dr_n_loc = dn_dr_loc / th_ne_avg[th_rho_ind]
+        dTe_dr_T_loc = dTe_dr_loc / th_te_avg[th_rho_ind]
+        
+        if self.tag_cxrs_ti:
+            dTi_dr_T_loc = dTi_dr_loc / cxrs_ti_avg[cxrs_rho_ind] 
+        else:
+            dTi_dr_T_loc = mp.nan
+        
+        return dn_dr_loc, dTe_dr_loc, dTi_dr_loc, dn_dr_n_loc, dTe_dr_T_loc, dTi_dr_T_loc
+
 
     def get_Ip(self):
         '''
@@ -678,7 +776,7 @@ class TCVShot():
         SHOULD BE POSSIBLE TO ESTIMATE RHO FROM R AND Z
         '''
         
-        if self.tag_btor==False or self.tag_th_fit==False:
+        if self.tag_btor==False or self.tag_cxrs_ti==False:
             try:
                 self.get_cxrs_fit()
                 print('ok load cxrs fit')
@@ -1543,6 +1641,7 @@ def plot_ti_raw_several_shots(shot_list, timewindow_list, sys_list_list):
     ax.set_xlim(0.6, 1.1)
     ax.set_ylim(0, 0.8)
     ax.ticklabel_format(axis='y', style='plain')
+
 
 
 

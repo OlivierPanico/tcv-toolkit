@@ -264,3 +264,229 @@ def beamtracing_density_location(shot,twindow, freqGHz, modex=True, anglepol=-50
     
     
 # %%
+# THIS WAS INITIALLY IN BEAMTRACINGLOCATION 
+
+
+#%% interactive plotting
+from DBS.io.utils import run_line_magic
+# run_line_magic('matplotlib', 'widget')
+
+run_line_magic('matplotlib', 'inline')
+
+#%% 81069 vs 80940
+shot=81069
+isweep = 4
+ifreq_list = np.linspace(1,20,20, dtype=int)
+plot_k_perp = False
+ax = plot_beam_on_prof(shot, isweep, ifreq_list, ax=None,cprof='blue', cref='cyan', chop='blue', plot_k_perp=False)
+
+shot=80940
+isweep = 8
+ifreq_list = np.linspace(1,20,20, dtype=int)
+plot_k_perp = False
+ax = plot_beam_on_prof(shot, isweep, ifreq_list, ax=ax,cprof='purple', cref='orange', chop='purple', plot_k_perp=False)
+my_legend(ax)
+
+shot=81069
+isweep = 5
+ifreq_list = np.linspace(1,20,20, dtype=int)
+plot_k_perp = False
+ax = plot_beam_on_prof(shot, isweep, ifreq_list, ax=None,cprof='blue', cref='cyan', chop='blue', plot_k_perp=False)
+
+shot=80940
+isweep = 9
+ifreq_list = np.linspace(1,20,20, dtype=int)
+plot_k_perp = False
+ax = plot_beam_on_prof(shot, isweep, ifreq_list, ax=ax,cprof='purple', cref='orange', chop='purple', plot_k_perp=False)
+my_legend(ax)
+
+# %% 80940 vs 81084 : bad matching
+shot=81084
+isweep = 5
+ifreq_list = np.linspace(1,20,20, dtype=int)
+plot_k_perp = False
+ax = plot_beam_on_prof(shot, isweep, ifreq_list, ax=None,cprof='blue', cref='cyan', chop='blue', plot_k_perp=False)
+
+shot=80940
+isweep = 4
+ifreq_list = np.linspace(1,20,20, dtype=int)
+plot_k_perp = False
+ax = plot_beam_on_prof(shot, isweep, ifreq_list, ax=ax,cprof='purple', cref='orange', chop='purple', plot_k_perp=False)
+my_legend(ax)
+
+
+
+
+# %% 80949 vs 81069: bad match
+shot=81069
+isweep = 9
+ifreq_list = np.linspace(1,20,20, dtype=int)
+plot_k_perp = False
+ax = plot_beam_on_prof(shot, isweep, ifreq_list, ax=None,cprof='blue', cref='cyan', chop='blue', plot_k_perp=False)
+
+shot=80949
+isweep = 6
+ifreq_list = np.linspace(1,20,20, dtype=int)
+plot_k_perp = False
+ax = plot_beam_on_prof(shot, isweep, ifreq_list, ax=ax,cprof='purple', cref='orange', chop='purple', plot_k_perp=False)
+my_legend(ax)
+
+
+
+# %% 80949 vs 81065: good match
+shot=81065
+isweep = 9
+ifreq_list = np.linspace(1,20,20, dtype=int)
+plot_k_perp = False
+ax = plot_beam_on_prof(shot, isweep, ifreq_list, ax=None,cprof='blue', cref='cyan', chop='blue', plot_k_perp=False)
+
+shot=80949
+isweep = 8
+ifreq_list = np.linspace(1,20,20, dtype=int)
+plot_k_perp = False
+ax = plot_beam_on_prof(shot, isweep, ifreq_list, ax=ax,cprof='purple', cref='orange', chop='purple', plot_k_perp=False)
+my_legend(ax)
+
+# %% 80949 vs 81065: bad match
+
+shot=81084
+isweep = 8
+ifreq_list = np.linspace(1,20,20, dtype=int)
+plot_k_perp = False
+ax = plot_beam_on_prof(shot, isweep, ifreq_list, ax=None,cprof='blue', cref='cyan', chop='blue', plot_k_perp=False)
+
+shot=80949
+isweep = 8
+ifreq_list = np.linspace(1,20,20, dtype=int)
+plot_k_perp = False
+ax = plot_beam_on_prof(shot, isweep, ifreq_list, ax=ax,cprof='purple', cref='orange', chop='purple', plot_k_perp=False)
+my_legend(ax)
+
+# %%
+from diag_tcv.shotAnalysis.dischargeInfoMdsObject import plot_profiles_comparison
+
+shot_list=[81069, 80940]
+time_list=[0.9, 1.7]
+
+plot_profiles_comparison(shot_list, time_list, plot_err=None, rhomin=None, rhomax=None, tavg=None)
+
+
+
+#%% plot velocity profile
+# machine, shot, isweep_list, xmode, channelvals = 'tcv', 81069, [4], 1, [4]
+# plot_velocity(shot, isweep_list, xmode=1, channelvals=[4],machine='tcv', ax=None, cvel='blue')
+
+
+
+
+# %% 80940 (beg) VS 81065 (beg)
+wrapper_beam_vel_prof(shot_list=[80940, 81065], isweep_list=[4, 4], time_list=[0.7, 0.7],
+                    rhomin=0.75, rhomax=1.05, tavg=0.2, xmode=1, channelvals=[4])
+
+#%% 80949 (end) VS 81065 (end)
+wrapper_beam_vel_prof(shot_list=[80949, 81065], isweep_list=[8, 9], time_list=[1.5, 1.7],
+                    rhomin=0.75, rhomax=1.05, tavg=0.2, xmode=1, channelvals=[4])
+
+
+#%% 80949 (end) VS 81084 (end)
+wrapper_beam_vel_prof(shot_list=[80949, 81084], isweep_list=[8, 9], time_list=[1.5, 1.7],
+                    rhomin=0.75, rhomax=1.05, tavg=0.2, xmode=1, channelvals=[4])
+
+#%% 80949 (beg) VS 81069 (beg)
+wrapper_beam_vel_prof(shot_list=[80949, 81069], isweep_list=[4, 5], time_list=[0.7, 0.9],
+                    rhomin=0.75, rhomax=1.05, tavg=0.2, xmode=1, channelvals=[4])
+
+#%% 80940 (end) vs 81069 (end)
+wrapper_beam_vel_prof(shot_list=[80940, 81069], isweep_list=[8, 9], time_list=[1.5, 1.7],
+                    rhomin=0.75, rhomax=1.05, tavg=0.2, xmode=1, channelvals=[4])
+# %% 80940 (beg) vs 81084 (beg)
+wrapper_beam_vel_prof(shot_list=[80940, 81084], isweep_list=[4, 5], time_list=[0.7, 0.9],
+                    rhomin=0.75, rhomax=1.05, tavg=0.2, xmode=1, channelvals=[4])
+
+
+# %% 80949 (end) vs 81084 (end)
+wrapper_beam_vel_prof(shot_list=[80949, 81084], isweep_list=[8, 9], time_list=[1.5, 1.7],
+                    rhomin=0.75, rhomax=1.05, tavg=0.2, xmode=1, channelvals=[4])
+
+
+
+
+
+
+
+
+# %% 
+wrapper_beam_vel_prof(shot_list=[81087], isweep_list=[4], time_list=[0.7],
+                    rhomin=0.75, rhomax=1.05, tavg=0.2, xmode=1, channelvals=[4])
+
+
+
+#%% Week CW29
+###############################################################
+########################## WEEK CW29 ##########################
+###############################################################
+#%%
+shot=82549
+isweep = 3
+ifreq_list='all'
+
+plot_beam_on_prof(shot, isweep, ifreq_list, ax=None, cprof='black', cref='blue', chop='red', plot_k_perp=False)
+   
+wrapper_beam_vel_prof(shot_list=[shot], isweep_list=[isweep], time_list=[0.7],
+                    rhomin=0.75, rhomax=1.05, tavg=0.2, xmode=1, channelvals=[4])
+
+#%%
+shot_list=[82549, 81087]
+isweep_list = [3, 4]
+time_list = [0.7, 0.7]
+ifreq_list='all'
+
+wrapper_beam_vel_prof(shot_list, isweep_list, time_list,
+                    rhomin=0.75, rhomax=1.05, tavg=0.2, xmode=1, channelvals=[4])
+#%%
+shot_list=[82549, 82549]
+isweep_list = [5, 6]
+time_list = [1.4, 1.7]
+ifreq_list='all'
+
+wrapper_beam_vel_prof(shot_list, isweep_list, time_list,
+                    rhomin=0.75, rhomax=1.05, tavg=0.2, xmode=1, channelvals=[4])
+
+
+#%%
+shot_list=[82547, 81084]
+isweep_list = [5, 9]
+time_list = [1.3, 1.7]
+ifreq_list='all'
+
+wrapper_beam_vel_prof(shot_list, isweep_list, time_list,
+                    rhomin=0.75, rhomax=1.05, tavg=0.2, xmode=1, channelvals=[4])
+
+
+#%%
+shot_list=[82556, 81084]
+isweep_list = [3, 5]
+time_list = [0.7, 0.7]
+ifreq_list='all'
+
+wrapper_beam_vel_prof(shot_list, isweep_list, time_list,
+                    rhomin=0.75, rhomax=1.05, tavg=0.2, xmode=1, channelvals=[4])
+#%%
+shot=82556
+isweep = 3
+ifreq_list='all'
+
+plot_beam_on_prof(shot, isweep, ifreq_list, ax=None, cprof='black', cref='blue', chop='red', plot_k_perp=False)
+   
+    
+   
+#%% PREPARE BEAMTRACING
+shotnb = 82556
+isweep_list = [3,4,5,6]
+
+for i, isweep in enumerate(isweep_list):
+    _DBSbeam('tcv',shot=shotnb, isweep=isweep, xmode=1, channelval=3, verbose=True, plot=True, load_if_existing=True)
+    _DBSbeam('tcv',shot=shotnb, isweep=isweep, xmode=1, channelval=4, verbose=True, plot=True, load_if_existing=True)
+    
+
+

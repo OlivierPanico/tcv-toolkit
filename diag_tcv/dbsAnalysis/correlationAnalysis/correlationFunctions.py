@@ -30,7 +30,9 @@ Remarks:
 - taking the amplitude of zref and zhop leads to a double slope in the spatial correlation function that is interpreted as avalanche signal
 - taking amplitude signal removes time delays in the time correlation function (maximum is centered on zero time delay)
 
-Method 2 (Panico article)
+
+
+Method 2
 1) normalize signals zref and zhop
 2) take the full complex signal of zref and zhop
 3) Perform psd and csd (take care with normalizations)
@@ -181,6 +183,7 @@ def full_coherence_analysis(zref, zhop, dt, nperseg=1024, noverlap=512, window=N
     dictFullCohAnalysis['tcorr_spec'] = tcorr_spec
     dictFullCohAnalysis['corr'] = corr
     dictFullCohAnalysis['fcsd'] = fcsd
+    dictFullCohAnalysis['csd'] = csd
     dictFullCohAnalysis['spectral_coh'] = spectral_coh
     dictFullCohAnalysis['tcorr_scipy'] = tcorr_scipy
     dictFullCohAnalysis['corr_scipy'] = corr_scipy
@@ -692,7 +695,7 @@ def estimate_max_spectral_coh(fcsd, spectral_coh, mode='amp', plot=False, **kwar
         my_text(ax, 0.2, 0.9, 'raw max = {:.2f}'.format(np.max(abs(ydata))), color='black', fontsize=12)
         my_text(ax, 0.2, 0.75, 'est. max = {:.2f} +/- {:.2f}'.format(amp, amp_err), color='black', fontsize=12)
     
-        return amp, amp_err, max_spectral_coh_raw, ax
+        return amp, amp_err, max_spectral_coh_raw
     
     return amp, amp_err, max_spectral_coh_raw
     

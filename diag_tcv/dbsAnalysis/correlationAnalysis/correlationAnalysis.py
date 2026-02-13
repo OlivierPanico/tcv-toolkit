@@ -30,6 +30,8 @@ from dataAnalysis.utils.utils import find_plateaus, my_linearRegression
 #TCV
 from diag_tcv.shotAnalysis.dischargeInfoMdsObject import TCVShot
 from diag_tcv.dbsAnalysis.velocityProfile.velocityFunctions import get_velocity_prof_object
+#Pascale's correlation 
+from diag_tcv.dbsAnalysis.correlationAnalysis.correlationDataPascale.readCorrelationDataPascale import openPascaleCorrMatFile, extractPascaleCorrSweepData
 
 ### ========== ###
 ### PARAMETERS ###
@@ -68,12 +70,9 @@ class CorrelationAnalysis(TCVShot):
 
         self.xmode = xmode    
         self.plot = plot
-    
-        self._load_sweep_params()
         
-        self.processedData = dict()
-        for i in range(self.nbsweep):
-            self.processedData['sweep'+str(i+1)] = dict()
+        self._load_sweep_params()
+
 
         ### Identificiation of the plateaus on reference frequencies ###
         plateaus_indices = find_plateaus(self.params_ref.F)
@@ -81,6 +80,19 @@ class CorrelationAnalysis(TCVShot):
         print(' --> {} plateaus '.format(nb_plateaus))
         self.plateaus_indices = plateaus_indices
         self.nb_plateaus = nb_plateaus
+        
+        # Store the time windows for each plateau in each sweep
+        for i in range(self.nbsweep):
+            sweep_tinit = self.params_ref.TDIFDOP + self.params_ref.t0seq[i]
+            period = self.params_ref.Period
+            plateau_time_windows = []
+            for j in range(nb_plateaus):
+                freq_start_ind = plateaus_indices[j][0]
+                freq_end_ind = plateaus_indices[j][1]
+                t_start = self.params_ref.t0F_structured[i, freq_start_ind]
+                t_end = self.params_ref.t0F_structured[i, freq_end_ind]
+                plateau_time_windows.append([t_start, t_end])
+            self.processedData['sweep'+str(i+1)]['plateau_time_windows'] = plateau_time_windows
 
 
     def _load_sweep_params(self):
@@ -100,8 +112,13 @@ class CorrelationAnalysis(TCVShot):
         period = self.params_ref.Period
         print(' --> {} sweeps '.format(nbsweep))
         print('     Associated time windows : ')
+        self.sweep_time_windows = []
+        self.processedData = dict()
+        
         for i in range(nbsweep):
             print('     sweep {} : [{:.2f}, {:.2f}] s'.format(i+1, sweep_tinit[i], sweep_tinit[i]+period*1e-3))
+            self.processedData['sweep'+str(i+1)] = dict()
+            self.processedData['sweep'+str(i+1)]['time_window'] = [sweep_tinit[i], sweep_tinit[i]+period*1e-3]
 
         #Nbpts per freq
         assert(self.params_ref.dtAcq==self.params_hop.dtAcq)
@@ -307,20 +324,17 @@ class CorrelationAnalysis(TCVShot):
         if ret:
             return z_list_ref, z_list_hop, t_reduced_list_ref, t_reduced_list_hop
         
-    def get_raytracing_isweep(self, isweep, retdata=False):
+    def get_raytracing_isweep(self, isweep, twindow=None,retdata=False):
         '''
         Load the raytracing for the whole sweep
         '''
-        
-
         # if self.numDemod:
         #     output_ref, beam3d_interface_ref = _DBSbeam('tcv',shot=self.shot, isweep=isweep, xmode=self.xmode, channelval=3, ifreqs='all', verbose=self.verbose, plot=self.plot, load_if_existing=True, nrays_radial=1, nrays_azimuthal=1)
         #     output_hop, beam3d_interface_hop = _DBSbeam('tcv',shot=self.shot, isweep=isweep, xmode=self.xmode, channelval=4, ifreqs='all', verbose=self.verbose, plot=self.plot, load_if_existing=True, nrays_radial=1, nrays_azimuthal=1)
         # else:
-        output_ref, beam3d_interface_ref = _DBSbeam('tcv',shot=self.shot, isweep=isweep, xmode=self.xmode, channelval=1, ifreqs='all', verbose=self.verbose, plot=self.plot, load_if_existing=True, nrays_radial=1, nrays_azimuthal=1)
-        output_hop, beam3d_interface_hop = _DBSbeam('tcv',shot=self.shot, isweep=isweep, xmode=self.xmode, channelval=2, ifreqs='all', verbose=self.verbose, plot=self.plot, load_if_existing=True, nrays_radial=1, nrays_azimuthal=1)
-
-    
+        output_ref, beam3d_interface_ref = _DBSbeam('tcv',shot=self.shot, isweep=isweep, xmode=self.xmode, channelval=1, ifreqs='all', verbose=self.verbose, plot=self.plot, load_if_existing=True, nrays_radial=1, nrays_azimuthal=1, twindow=twindow)
+        output_hop, beam3d_interface_hop = _DBSbeam('tcv',shot=self.shot, isweep=isweep, xmode=self.xmode, channelval=2, ifreqs='all', verbose=self.verbose, plot=self.plot, load_if_existing=True, nrays_radial=1, nrays_azimuthal=1, twindow=twindow)
+   
 
         # outp = interface.fetch_result()
 
@@ -385,6 +399,7 @@ class CorrelationAnalysis(TCVShot):
         r_ref = np.zeros((nbfreq))
         z_ref = np.zeros((nbfreq))
         
+        
         sweep_tinit  = self.params_ref.TDIFDOP + self.params_ref.t0seq[isweep-1]
         length_sweep = self.params_ref.Period*1e-3
         
@@ -432,7 +447,7 @@ class CorrelationAnalysis(TCVShot):
         # arrays to fill
         corr_list = np.zeros((len(ifreq_list), nperseg), dtype=complex)
         maxcorr_list = np.zeros((len(ifreq_list)))
-        
+        csd_list = np.zeros((len(ifreq_list), nperseg), dtype=complex)
         spectral_coh_list = np.zeros((len(ifreq_list), nperseg), dtype=complex)
         raw_maxspectralcoh_list = np.zeros((len(ifreq_list)))
         fit_maxspectralcoh_list = np.zeros((len(ifreq_list)))
@@ -440,6 +455,8 @@ class CorrelationAnalysis(TCVShot):
         
         scipy_corr_list = np.zeros((len(ifreq_list), nperseg), dtype=complex)
         scipy_maxcorr_list = np.zeros((len(ifreq_list)))
+        
+        max_corr_delay_list = np.zeros((len(ifreq_list)))  
         
         dt=self.processedData['sweep'+str(isweep)]['dt']
         
@@ -458,16 +475,20 @@ class CorrelationAnalysis(TCVShot):
             
             tcorr_loc = dictFullCohAnalysis['tcorr_spec']
             corr_loc = dictFullCohAnalysis['corr']
+            csd_loc = dictFullCohAnalysis['csd']
             fcsd_spectral = dictFullCohAnalysis['fcsd']
             spectral_coh_loc = dictFullCohAnalysis['spectral_coh']
             tcorr_scipy = dictFullCohAnalysis['tcorr_scipy']
             corr_scipy = dictFullCohAnalysis['corr_scipy']
+            
+            max_corr_delay = dictFullCohAnalysis['max_corr_delay']
             
             maxcorr = dictFullCohAnalysis['max_corr']
             raw_maxspectralcoh = dictFullCohAnalysis['max_raw_spectral_coh']
             scipy_maxcorr = dictFullCohAnalysis['max_corr_scipy']
             fit_maxspectralcoh = dictFullCohAnalysis['max_fit_spectral_coh']
             err_fit_maxspectralcoh = dictFullCohAnalysis['err_max_fit_spectral_coh']
+
 
 
             # lower_error = np.minimum(err_fit_maxspectralcoh_list, fit_maxspectralcoh)  # Ensure the lower error does not exceed the value of y
@@ -478,27 +499,31 @@ class CorrelationAnalysis(TCVShot):
             corr_list[i,:] = corr_loc
             spectral_coh_list[i,:] = spectral_coh_loc
             scipy_corr_list[i,:] = corr_scipy
+            csd_list[i,:] = csd_loc
             
             maxcorr_list[i] = maxcorr
             scipy_maxcorr_list[i] = scipy_maxcorr
             raw_maxspectralcoh_list[i] = raw_maxspectralcoh
             fit_maxspectralcoh_list[i] = fit_maxspectralcoh
             err_fit_maxspectralcoh_list[i] = err_fit_maxspectralcoh
+            max_corr_delay_list[i] = max_corr_delay
             
-        corr_list = np.array(np.real(corr_list))
+        corr_list = np.array((corr_list))
         maxcorr_list = np.array(maxcorr_list)
+        csd_list = np.array((csd_list))
         spectral_coh_list = np.array((spectral_coh_list))
         raw_maxspectralcoh_list = np.array(raw_maxspectralcoh_list)
         fit_maxspectralcoh_list = np.array(fit_maxspectralcoh_list)
         err_fit_maxspectralcoh_list = np.array(err_fit_maxspectralcoh_list)
         scipy_corr_list = np.array((scipy_corr_list))
         scipy_maxcorr_list = np.array(scipy_maxcorr_list)
+        max_corr_delay_list = np.array(max_corr_delay_list)
         
         #We save the results in the processedData dictionary   
         self.processedData['sweep'+str(isweep)]['tcorr'] = tcorr_loc
         self.processedData['sweep'+str(isweep)]['corr_list'] = corr_list
         self.processedData['sweep'+str(isweep)]['maxcorr_list'] = maxcorr_list
-        
+        self.processedData['sweep'+str(isweep)]['csd_list'] = csd_list
         self.processedData['sweep'+str(isweep)]['fcsd_spectral'] = fcsd_spectral
         self.processedData['sweep'+str(isweep)]['spectral_coh_list'] = spectral_coh_list
         self.processedData['sweep'+str(isweep)]['raw_maxspectralcoh_list'] = raw_maxspectralcoh_list
@@ -508,8 +533,10 @@ class CorrelationAnalysis(TCVShot):
         self.processedData['sweep'+str(isweep)]['scipy_corr_list'] = scipy_corr_list
         self.processedData['sweep'+str(isweep)]['scipy_maxcorr_list'] = scipy_maxcorr_list
         
+        self.processedData['sweep'+str(isweep)]['max_corr_delay_list'] = max_corr_delay_list
+        
         if retdata:
-            return tcorr_loc, corr_list, maxcorr_list, fcsd_spectral, spectral_coh_list, raw_maxspectralcoh_list, fit_maxspectralcoh_list, err_fit_maxspectralcoh_list, scipy_corr_list, scipy_maxcorr_list
+            return tcorr_loc, corr_list, maxcorr_list, fcsd_spectral, spectral_coh_list, raw_maxspectralcoh_list, fit_maxspectralcoh_list, err_fit_maxspectralcoh_list, scipy_corr_list, scipy_maxcorr_list, max_corr_delay_list
 
     def get_velocity_isweep(self, isweep, retdata=False):
         '''
@@ -524,7 +551,7 @@ class CorrelationAnalysis(TCVShot):
 
     ### ======================================================================================== ###
     
-    def prepare_coherence_for_plot(self, isweep, add_pt_zero=True, x_norm='rho_s', mode='amp',  load_if_existing=False, retdata=False):
+    def prepare_coherence_for_plot(self, isweep, add_pt_zero=True, x_norm='rho_s', mode='amp', load_from_pascale=False, c_type = 'pmusic',  load_if_existing=False, retdata=False):
         """
         Prepare the coherence for a given sweep 
         
@@ -538,26 +565,52 @@ class CorrelationAnalysis(TCVShot):
             - 'amp' : amplitude
             - 'phase' : phase
             - 'full' : full signal    
+        
+        load_from_pascale : bool,
+            - if True load the correlation from pascale database
 
+        c_type : str,
+            - 'pmusic': load maxCpmus from pascale
         """
         
         nb_plateaus = self.nb_plateaus
         plateau_list = np.arange(nb_plateaus)
 
+        ### first we try to load data from pascale database if asked
+        if load_from_pascale:
+            print(' --- loading coherence data from pascale for sweep {}'.format(isweep) + ' --- ')
+            mat_file = openPascaleCorrMatFile(self.shot) 
+            maxCpmus, Cmax, Campmax = extractPascaleCorrSweepData(mat_file, isweep)
+            if c_type == 'pmusic':
+                self.processedData['sweep'+str(isweep)]['maxcorr_list'] = maxCpmus
+            elif c_type == 'Cmax':
+                self.processedData['sweep'+str(isweep)]['maxcorr_list'] = Cmax
+            elif c_type == 'Campmax':
+                self.processedData['sweep'+str(isweep)]['maxcorr_list'] = Campmax
+                        
+            self.processedData['sweep'+str(isweep)]['raw_maxspectralcoh_list'] = np.zeros_like(maxCpmus)
+            self.processedData['sweep'+str(isweep)]['fit_maxspectralcoh_list'] = np.zeros_like(maxCpmus)
+            self.processedData['sweep'+str(isweep)]['err_fit_maxspectralcoh_list'] = np.zeros_like(maxCpmus)
+            self.processedData['sweep'+str(isweep)]['max_corr_delay_list'] = np.zeros_like(maxCpmus)
+            
+     
         ### if data not loaded for the sweep we load them
-        if load_if_existing is False or 'maxcoh_list' not in self.processedData['sweep'+str(isweep)]:
-            print(' --- getting coherence data for sweep {}'.format(isweep) + ' --- ')
+        elif load_if_existing is False or 'maxcoh_list' not in self.processedData['sweep'+str(isweep)]:
+            print(' --- computing coherence data for sweep {}'.format(isweep) + ' --- ')
             self.get_correlation_isweep(isweep, nperseg=1024, noverlap=512, window=None, remove_mean=True,mode=mode, plot=False, retdata=False)
+            
         ### delta is computed depending on the chosen normalization
         if load_if_existing is False or 'delta' not in self.processedData['sweep'+str(isweep)]:
             self.get_delta(isweep)
+            
+        ### rho_s_plateau is computed if not existing
         if load_if_existing is False or 'rho_s_plateaus' not in self.processedData['sweep'+str(isweep)]:
             if x_norm == 'rho_i':
                 self.get_rho_s_plateau(isweep, rho_i=True)
             else:
                 self.get_rho_s_plateau(isweep)
         
-
+        ### rho list for the given sweep
         rho_list_hop = self.processedData['sweep'+str(isweep)]['rho_list_hop']
         
         if x_norm == 'rho_hop':
@@ -571,6 +624,8 @@ class CorrelationAnalysis(TCVShot):
         self.processedData['sweep'+str(isweep)]['prepData']['nb_plateaus'] = nb_plateaus
         self.processedData['sweep'+str(isweep)]['prepData']['plateau_list'] = plateau_list
         
+        
+        ### Now that we have loaded everything for a sweep we prepare the data for each plateau
         for i, plat in enumerate(plateau_list):
             
             #Step 0: choose the plateau
@@ -593,6 +648,7 @@ class CorrelationAnalysis(TCVShot):
             raw_maxspectralcoh_list = self.processedData['sweep'+str(isweep)]['raw_maxspectralcoh_list'][plat_indices[0]:plat_indices[1]+1]
             fit_maxspectralcoh_list = self.processedData['sweep'+str(isweep)]['fit_maxspectralcoh_list'][plat_indices[0]:plat_indices[1]+1]
             err_fit_maxspectralcoh_list = self.processedData['sweep'+str(isweep)]['err_fit_maxspectralcoh_list'][plat_indices[0]:plat_indices[1]+1]
+            max_corr_delay_list = self.processedData['sweep'+str(isweep)]['max_corr_delay_list'][plat_indices[0]:plat_indices[1]+1]
             
             #Step 4: add the point zero
             if add_pt_zero:
@@ -602,12 +658,14 @@ class CorrelationAnalysis(TCVShot):
                     raw_maxspectralcoh_list = np.concatenate(([1], raw_maxspectralcoh_list))
                     fit_maxspectralcoh_list = np.concatenate(([1], fit_maxspectralcoh_list))
                     err_fit_maxspectralcoh_list = np.concatenate(([0], err_fit_maxspectralcoh_list))
+                    max_corr_delay_list = np.concatenate(([0], max_corr_delay_list))
                 else:
                     delta_loc = np.concatenate(([0], delta_loc))
                     maxcorr_list = np.concatenate(([1], maxcorr_list))
                     raw_maxspectralcoh_list = np.concatenate(([1], raw_maxspectralcoh_list))
                     fit_maxspectralcoh_list = np.concatenate(([1], fit_maxspectralcoh_list))
                     err_fit_maxspectralcoh_list = np.concatenate(([0], err_fit_maxspectralcoh_list))
+                    max_corr_delay_list = np.concatenate(([0], max_corr_delay_list))
                     
                 #sorting the arrays along the delta components
                 inds = delta_loc.argsort()
@@ -616,11 +674,12 @@ class CorrelationAnalysis(TCVShot):
                 raw_maxspectralcoh_list = raw_maxspectralcoh_list[inds]
                 fit_maxspectralcoh_list = fit_maxspectralcoh_list[inds]
                 err_fit_maxspectralcoh_list = err_fit_maxspectralcoh_list[inds]
-            
+                max_corr_delay_list = max_corr_delay_list[inds]
             self.processedData['sweep'+str(isweep)]['prepData']['plateau'+str(plat)] = {'rho_loc':rho_loc, 'rho_s_loc':rho_s_loc, 'delta':delta_loc,
                                                                                         'rho_hop_err_plus':rho_hop_err_plus, 'rho_hop_err_minus':rho_hop_err_minus,
                                                                                         'maxcorr':maxcorr_list, 'raw_maxspectralcoh':raw_maxspectralcoh_list,
-                                                                                        'fit_maxspectralcoh':fit_maxspectralcoh_list, 'err_fit_maxspectralcoh_list':err_fit_maxspectralcoh_list}
+                                                                                        'fit_maxspectralcoh':fit_maxspectralcoh_list, 'err_fit_maxspectralcoh_list':err_fit_maxspectralcoh_list,
+                                                                                        'max_corr_delay_list': max_corr_delay_list}
             
 
         if retdata:
@@ -1287,7 +1346,7 @@ class CorrelationAnalysis(TCVShot):
 
 
 
-def plot_correlation_slopes(xdata, ydata, err=None, rho_s=None, rho_loc = None, ind_turb=None, ind_aval=None, ind_turb_pos=None, impose_max=True, exclude_aval=None, caption=True, xunit='rho_s', ax=None, ylog=True, retdata=False, **kwargs):
+def plot_correlation_slopes(xdata, ydata, err=None, rho_s=None, rho_loc = None, ind_turb=None, ind_aval=None, ind_turb_pos=None, impose_max=True, exclude_turb=None, exclude_aval=None, caption=True, xunit='rho_s', ax=None, ylog=True, retdata=False, **kwargs):
     '''
     Assumes that xdata is given in delta/rho_s
     
@@ -1316,10 +1375,18 @@ def plot_correlation_slopes(xdata, ydata, err=None, rho_s=None, rho_loc = None, 
     if ind_turb is not None:
         ind_turb_min=ind_turb[0]    
         ind_turb_max=ind_turb[1]
-        if impose_max:
-            popt, perr, rsquared = my_linearRegression(xdata[ind_turb_min:ind_turb_max], np.log(ydata[ind_turb_min:ind_turb_max]), mode='affine', b=0)
+        if exclude_turb is not None:
+            ### remove the point exclude
+            xdata_excluded = np.delete(xdata[ind_turb_min:ind_turb_max], exclude_turb)
+            ydata_excluded = np.delete(ydata[ind_turb_min:ind_turb_max], exclude_turb)
+            ax.scatter(xdata[ind_turb_min:ind_turb_max][exclude_turb], ydata[ind_turb_min:ind_turb_max][exclude_turb], color='red', marker='x', s=120)
         else:
-            popt, perr, rsquared = my_linearRegression(xdata[ind_turb_min:ind_turb_max], np.log(ydata[ind_turb_min:ind_turb_max]), mode='affine')
+            xdata_excluded = xdata[ind_turb_min:ind_turb_max]
+            ydata_excluded = ydata[ind_turb_min:ind_turb_max]
+        if impose_max:
+            popt, perr, rsquared = my_linearRegression(xdata_excluded, np.log(ydata_excluded), mode='affine', b=0)
+        else:
+            popt, perr, rsquared = my_linearRegression(xdata_excluded, np.log(ydata_excluded), mode='affine')
         ax.plot(xdata[ind_turb_min:ind_turb_max], np.exp(popt[0]*xdata[ind_turb_min:ind_turb_max]+ popt[1]), 'r', marker='')
         lc = 1/popt[0]
         lcerr = perr[0]/popt[0]**2
@@ -1354,7 +1421,7 @@ def plot_correlation_slopes(xdata, ydata, err=None, rho_s=None, rho_loc = None, 
         lavalerr = perr[0]/popt[0]**2
         # lavalerr = max(abs(abs(1/(popt[0]-perr[0]) - abs(1/popt[0]))), abs(abs(1/(popt[0]+perr[0]) - abs(1/popt[0]))) )
        
-        Caval = ydata[ind_aval_max]
+        Caval = ydata[ind_aval_max-1]
         print('La = {:.2f} +/- {:.2f} ; R² = {:.2f} ; Caval = {:.2f}'.format(laval, lavalerr, rsquared, Caval))
         Cavalerr = 0.1
         if caption:
